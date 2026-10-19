@@ -72,7 +72,8 @@ describe('propagation: family_members', () => {
     for (const v of await assertMirrored(db(), f.children)) {
       assert.equal(v.father_name, '');
       assert.equal(v.father_phone, '');
-      assert.equal(v.use_father_phone_for_notification, null, 'no father: no father notification flag');
+      assert.equal(v.use_father_phone_for_notification, 0, 'no father: the legacy "no notifications" value');
+      assert.equal(v.notification_father_phone_method, 'voice');
     }
   });
 
@@ -81,7 +82,7 @@ describe('propagation: family_members', () => {
     await db().query("UPDATE family_members SET status = 'trash' WHERE id = ?", [f.motherMember]);
     for (const v of await assertMirrored(db(), f.children)) {
       assert.equal(v.mother_name, '');
-      assert.equal(v.use_mother_phone_for_notification, null);
+      assert.equal(v.use_mother_phone_for_notification, 0);
       assert.equal(v.parent_email, 'avi@example.test', 'falls back to the primary member');
     }
   });
@@ -91,22 +92,24 @@ describe('propagation: family_members', () => {
     await db().query('DELETE FROM family_members WHERE id = ?', [f.motherMember]);
     for (const v of await assertMirrored(db(), f.children)) {
       assert.equal(v.mother_name, '');
-      assert.equal(v.mother_fname, '');
-      assert.equal(v.notification_mother_phone_method, null);
+      assert.ok(v.mother_fname === '' || v.mother_fname === null, 'empty in the legacy representation');
+      assert.equal(v.notification_mother_phone_method, 'voice');
     }
   });
 });
 
 describe('propagation: people', () => {
-  test('update: name and email reach every sibling', async () => {
+  test('update: name and email reach every sibling; *_name follows legacy_full_name only', async () => {
     const f = await linkedSiblings();
     await db().query("UPDATE people SET fname = 'Sarah', email = 'sarah.new@example.test' WHERE id = ?", [f.motherId]);
     for (const v of await assertMirrored(db(), f.children)) {
-      assert.equal(v.mother_name, 'Sarah Test');
+      assert.equal(v.mother_name, 'Sara Test', 'mother_name is legacy_full_name verbatim');
       assert.equal(v.mother_fname, 'Sarah');
       assert.equal(v.mother_email, 'sarah.new@example.test');
       assert.equal(v.parent_email, 'sarah.new@example.test');
     }
+    await db().query("UPDATE people SET legacy_full_name = 'Sarah Test' WHERE id = ?", [f.motherId]);
+    for (const v of await assertMirrored(db(), f.children)) assert.equal(v.mother_name, 'Sarah Test');
   });
 
   test('update: trashing a person empties their slot', async () => {
@@ -191,11 +194,11 @@ describe('propagation: family_member_children', () => {
     assert.equal(a3.parent_email, 'sara@example.test');
   });
 
-  test('deleting the father\'s rights row sets his notification columns to NULL', async () => {
+  test('deleting the father\'s rights row sets his notification columns to the legacy defaults', async () => {
     const f = await linkedSiblings();
     await db().query('DELETE FROM family_member_children WHERE member_id = ? AND child_id = ?', [f.fatherMember, f.children[0]]);
     const [a] = await assertMirrored(db(), f.children);
-    assert.equal(a.use_father_phone_for_notification, null);
-    assert.equal(a.notification_father_phone_method, null);
+    assert.equal(a.use_father_phone_for_notification, 0);
+    assert.equal(a.notification_father_phone_method, 'voice');
   });
 });
