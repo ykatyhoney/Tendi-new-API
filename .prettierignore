@@ -1,0 +1,13 @@
+dist/
+node_modules/
+var/
+openapi/
+package-lock.json
+migrations/
+docs/
+*.md
+# Written before Prettier was set up (Step 0.3); format in a separate change before editing them.
+scripts/family/
+test/family-db/
+test/family-backfill/
+test/family-proof/

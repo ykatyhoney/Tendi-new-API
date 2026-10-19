@@ -2,3 +2,4 @@ node_modules/
 .env
 # Backfill output (review CSVs hold personal data)
 var/
+dist/

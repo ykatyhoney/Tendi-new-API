@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import type { RowDataPacket } from 'mysql2/promise';
 import { useTestDatabase } from './support/db.ts';
 import type { Db } from './support/db.ts';
 import {
@@ -31,7 +32,7 @@ async function assertMirrored(conn: Db, children: number[]) {
 }
 
 async function inTransaction(conn: Db): Promise<boolean> {
-  const [[row]] = await conn.query<any[]>('SELECT @@in_transaction AS t');
+  const [[row]] = await conn.query<RowDataPacket[]>('SELECT @@in_transaction AS t');
   return row.t === 1;
 }
 

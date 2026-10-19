@@ -4,6 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import type { RowDataPacket } from 'mysql2/promise';
 import { rows, useTestDatabase, value } from './support/db.ts';
 import { createParents, link, lockLogCount, pickChildren, preview, storedLegacy } from './support/family.ts';
 
@@ -21,7 +22,7 @@ describe('lock', () => {
     const { child } = await linkedChild();
     assert.deepEqual(await storedLegacy(db(), child), await preview(db(), child));
     assert.equal(await lockLogCount(db(), child), 0);
-    const [[flag]] = await db().query<any[]>('SELECT @family_mirror AS f');
+    const [[flag]] = await db().query<RowDataPacket[]>('SELECT @family_mirror AS f');
     assert.equal(flag.f, null, '@family_mirror is reset after linking');
   });
 
