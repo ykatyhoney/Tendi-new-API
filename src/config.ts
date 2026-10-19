@@ -67,7 +67,9 @@ export function readEnvSchema<S extends TObject>(
   keepEmpty: string[] = [],
 ): Static<S> {
   const raw: Record<string, unknown> = { ...readEnvFile(), ...environment };
-  for (const key of Object.keys(raw)) if (raw[key] === '' && !keepEmpty.includes(key)) delete raw[key];
+  for (const key of Object.keys(raw)) {
+    if (raw[key] === undefined || (raw[key] === '' && !keepEmpty.includes(key))) delete raw[key];
+  }
 
   const env = Value.Default(schema, Value.Convert(schema, Value.Clean(schema, raw)));
   if (!Value.Check(schema, env)) {

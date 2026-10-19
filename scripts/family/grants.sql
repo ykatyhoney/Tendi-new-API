@@ -48,5 +48,8 @@ GRANT UPDATE (family_id) ON children TO 'family_api'@'localhost';
 -- The audit_logs row every family write adds (backend CLAUDE.md rule 5)
 GRANT INSERT ON audit_logs TO 'family_api'@'localhost';
 
+-- Staff authentication (src/modules/family/service/auth.ts) records when a token was last used
+GRANT UPDATE (last_seen_at) ON admin_api_tokens TO 'family_api'@'localhost';
+
 -- The link preview (GET /families/:id/children/:childId/preview)
 GRANT EXECUTE ON PROCEDURE sp_family_preview TO 'family_api'@'localhost';

@@ -47,6 +47,10 @@ export async function buildApp(config: Config = loadConfig()) {
       openapi: '3.0.3',
       info: { title: 'Tendi Family API', version: '0.1.0' },
       servers: [{ url: `http://localhost:${config.port}` }],
+      components: {
+        // Staff API token (admin_api_tokens), sent as Authorization: Bearer <token>.
+        securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } },
+      },
     },
     // Shared schemas appear under their $id (e.g. ErrorResponse), so generated client types get stable names.
     refResolver: {

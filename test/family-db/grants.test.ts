@@ -46,7 +46,7 @@ describe('family_api grants', () => {
       [
         ...family.map((t) => `GRANT SELECT, INSERT, UPDATE, DELETE ON \`${t}\``),
         'GRANT SELECT ON `admin`',
-        'GRANT SELECT ON `admin_api_tokens`',
+        'GRANT SELECT, UPDATE (`last_seen_at`) ON `admin_api_tokens`',
         'GRANT SELECT ON `children_additional_information`',
         'GRANT SELECT, UPDATE (`family_id`) ON `children`',
         'GRANT INSERT ON `audit_logs`',
