@@ -1,0 +1,24 @@
+{
+  "name": "tendi-new-api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tendi Fastify backend: family database objects, backfill scripts and the Family API",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "family:backfill": "node scripts/family/backfill.ts",
+    "test:family-backfill": "node --test \"test/family-backfill/**/*.test.ts\"",
+    "test:family-db":"npm run db:family:test-reset && node --test --test-concurrency=1 \"test/family-db/**/*.test.ts\"",
+    "db:family:test-reset": "bash scripts/family/db-test-reset.sh",
+    "db:family:restore": "bash scripts/family/db-restore.sh",
+    "db:family:test-clone": "bash scripts/family/db-test-clone.sh",
+    "db:family:migrate": "bash scripts/family/migrate.sh up",
+    "db:family:migrate:down": "bash scripts/family/migrate.sh down",
+    "db:family:migrate:status": "bash scripts/family/migrate.sh status"
+  },
+  "dependencies": {
+    "mysql2": "^3.24.6"
+  }
+}

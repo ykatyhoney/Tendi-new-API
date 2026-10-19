@@ -1,0 +1,16 @@
+// The schema's phone_normalized rule, shared by the backfill, the tests and (later) the API.
+//
+// No normalizer exists in this repository; the rule is taken from the data. The PHP app stores
+// 10-digit values in parent_sms_messages.phone_normalized and matched '718-555-0199' and
+// '7185550199' (children.father_phone) to the same 7185550199, which is "digits only, last 10".
+// Unknown numbers are stored as '' there, so fewer than 10 digits gives ''.
+// An extension ("x12", "ext 12", "ext. 12", "#12") and everything after it is dropped first,
+// so its digits never shift the last 10.
+
+const EXTENSION = /(?:ext\.?|x|#).*$/i;
+
+/** Drops any extension, then digits only, last 10; '' when fewer than 10 digits remain. */
+export function normalizePhone(raw: string | null | undefined): string {
+  const digits = (raw ?? '').replace(EXTENSION, '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : '';
+}
