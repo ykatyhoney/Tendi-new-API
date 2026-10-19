@@ -63,6 +63,10 @@ Step 0.3 extends these files instead of replacing them.
   - It is read-only: a `READ ONLY` transaction, with `CHECKSUM TABLE` compared before and after.
   - It writes `docs/family/family-sync-proof.md` with counts and child ids only, no personal data (CLAUDE.md rule 6), and the full diff with names and values as `var/family-proof/family-sync-proof-run-<id>.csv`. Accepted causes are `ALLOWED_CAUSES` in `compare.ts`: missing CAI row (D4), `parent_email` matches neither parent, parent shared with siblings, shared phone. Any other cause is a failure, and the command exits 1.
   - The comparison and cause rules are in `scripts/family/proof/compare.ts`, tested by `npm run test:family-proof`.
+- **Reconciliation (Phase 4 pilot):** `npm run family:reconcile [-- --once] [-- --database <name>]` runs `scripts/family/reconcile.ts`.
+  - It compares every linked child's 28 mirrored columns with `sp_family_preview(child, NULL)` and counts lock-log rows from the last 24 hours. It writes one `family_reconcile_runs` row (migration `family_023`) and never fixes data.
+  - Exit codes: 0 no drift or skipped, 2 drift, 1 error.
+  - The core is in `scripts/family/reconcile/run.ts`, tested in `test/family-db/reconcile.test.ts`. The runbook is `docs/family/reconcile-runbook.md`.
 - **Shared TypeScript helpers:** `scripts/family/lib/`.
   - `db.ts` provides the local-only mysql2 connection and `.env` loading; the tests use it as well.
   - `phone.ts` provides `normalizePhone`: digits only, last 10, `''` below 10 digits. No normalizer existed in this repository; the rule comes from `parent_sms_messages`, where the PHP app matched `718-555-0199` and `7185550199` to `7185550199`.
@@ -93,11 +97,11 @@ Step 0.3 extends these files instead of replacing them.
 
 ## Logging, errors, config, jobs, alerting
 
-- **Logging:** not set up yet.
+- **Logging:** not set up for the app yet. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
 - **Error response format:** not set up yet.
 - **Config/env loading:** `.env` (git-ignored) holds local values. `.env.example` (committed) lists the keys: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, plus `MARIADB_BIN_DIR` (optional). The `scripts/family/*.sh` scripts read `.env` themselves, and values already set in the environment take precedence. The app's config module is not set up yet.
-- **Scheduled jobs/cron:** not set up yet. The spec needs a nightly reconciliation job during the pilot, with a Redis lock so only one instance runs it.
-- **Alerting/email:** not set up yet.
+- **Scheduled jobs/cron:** chosen 2026-10-19: the **OS scheduler runs the CLI**, with no in-process scheduler and no new library. The nightly reconciliation is `npm run family:reconcile`. On Windows it is registered by `scripts/family/schedule-reconcile.ps1` (user task "Tendi family reconcile", 02:30, log in `var/family-reconcile/`); on Linux, cron (`docs/family/reconcile-runbook.md`). Single run: a MariaDB `GET_LOCK('<db>:family:reconcile')`, plus a per-night check in `family_reconcile_runs`. It switches to the Redis lock (`SET <prefix>:family:reconcile NX EX 3600`) in Step 2.3. The jobs may move into the app's scheduler after Step 0.3.
+- **Alerting/email:** not set up yet. Chosen 2026-10-19 for the reconciliation: a `WARNING` on stderr and exit code 2, which the scheduler records as a failed run. `scripts/family/reconcile/alert.ts` is the single hook to wire once an alerting channel is chosen. The PHP `notifications_queue` is the parents' SMS/voice/email queue and must not be used for staff alerts.
 
 ## Tests and CI
 

@@ -12,13 +12,14 @@
     "family:proof-run": "node scripts/family/proof-run.ts",
     "test:family-backfill": "node --test \"test/family-backfill/**/*.test.ts\"",
     "test:family-proof": "node --test \"test/family-proof/**/*.test.ts\"",
-    "test:family-db":"npm run db:family:test-reset && node --test --test-concurrency=1 \"test/family-db/**/*.test.ts\"",
+    "test:family-db": "npm run db:family:test-reset && node --test --test-concurrency=1 \"test/family-db/**/*.test.ts\"",
     "db:family:test-reset": "bash scripts/family/db-test-reset.sh",
     "db:family:restore": "bash scripts/family/db-restore.sh",
     "db:family:test-clone": "bash scripts/family/db-test-clone.sh",
     "db:family:migrate": "bash scripts/family/migrate.sh up",
     "db:family:migrate:down": "bash scripts/family/migrate.sh down",
-    "db:family:migrate:status": "bash scripts/family/migrate.sh status"
+    "db:family:migrate:status": "bash scripts/family/migrate.sh status",
+    "family:reconcile": "node scripts/family/reconcile.ts"
   },
   "dependencies": {
     "mysql2": "^3.24.6"
