@@ -29,7 +29,8 @@
     "db:family:migrate": "bash scripts/family/migrate.sh up",
     "db:family:migrate:down": "bash scripts/family/migrate.sh down",
     "db:family:migrate:status": "bash scripts/family/migrate.sh status",
-    "family:reconcile": "node scripts/family/reconcile.ts"
+    "family:reconcile": "node scripts/family/reconcile.ts",
+    "db:family:grants": "bash scripts/family/apply-grants.sh"
   },
   "dependencies": {
     "@fastify/cors": "11.3.1",

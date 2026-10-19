@@ -2,7 +2,7 @@
 
 Fastify backend for Tendi. It owns the family database objects (migrations, procedures, triggers), the backfill scripts and the Family API. Tendi-new (Next.js) reaches data only through this API over HTTP.
 
-**State as of 2026-10-19 (Step 0.3):** the Fastify app skeleton exists (`src/`): config, database pool, transactions, error format, CORS, OpenAPI, Redis client and `GET /health`. The family database layer (Steps 1.1–2.2, Phase 4 reconciliation) is in `migrations/family/` and `scripts/family/`. The Family API routes are not built yet. Each bullet below gives the decision taken, what exists, or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. Update this file in the same pull request that sets each item up.
+**State as of 2026-10-19 (Step 3.1):** the Fastify app (`src/`) has the family module with its own `family_api` pool, transaction helper and `GET /health/family`; the Family API routes come next. The family database layer is in `migrations/family/` and `scripts/family/`. Each bullet below gives the decision taken, what exists, or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. Update this file in the same pull request that sets each item up.
 
 **Steps 1.1–2.2 were done before Step 0.3**, on `family/2.1-backfill` and `family/2.2-proof-run`. Step 0.3 (`family/0.3-app-scaffold`) added the app around them and left their scripts, migrations and tests as they were.
 
@@ -22,8 +22,11 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **Plugin/module registration:**
   - `src/app.ts` exports `buildApp(config?)`, which builds the app without listening, so tests use `app.inject()`. `src/server.ts` builds the app and listens.
   - Shared resources are decorations on the root instance: `app.config`, `app.db` (the pool) and `app.redis` (client or `null`). They are typed in `src/app.ts` and closed in an `onClose` hook.
-  - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`. The first one is `src/modules/health/`.
-- **Where routes live:** in their module's folder under `src/modules/`. There is no global prefix: `GET /health`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`). The family module comes in Step 3.x.
+  - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`: `health` and `family`.
+  - **Family module** (`src/modules/family/`): `config.ts` (its env), `db.ts` (its pool and `familyDb.transaction`), `routes/` (HTTP: schemas, status codes), `service/` (rules; every write goes through the transaction), `repository/` (SQL only, on a `Queryable` = pool or transaction connection).
+    - Today it has `GET /health/family` (pings its pool). The Family API routes of PLAN.md are added in the following steps.
+    - It caches no family data (MVP).
+- **Where routes live:** in their module's folder under `src/modules/` (the family module: `src/modules/family/routes/`). There is no global API prefix: `GET /health`, `GET /health/family`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`).
 - **Naming conventions:**
   - Folders and files are kebab-case; a module's entry is `index.ts`.
   - Functions and variables are camelCase. TypeBox schemas are PascalCase, named after what they describe (`ErrorResponse`, `Health`).
@@ -32,8 +35,13 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 ## Database access
 
 - **Driver or ORM:** **`mysql2`, no ORM** (no Knex, Prisma or Drizzle).
-- **Where the pool is created:** `src/db/pool.ts` (`mysql2/promise` `createPool`, `DB_POOL_SIZE` connections, `utf8mb4_general_ci`, `dateStrings`). `buildApp` creates one pool, exposes it as `app.db` and ends it on close. For now it connects with the `DB_*` credentials; the dedicated `family_api` user comes with the Family API.
-- **Transactions:** `withTransaction(pool, work, { auditUser })` in `src/db/transaction.ts`. Every write route uses it. It runs `work(connection)` in one transaction, commits only if `work` completes, and rolls back otherwise. It sets `@audit_user` (the ra_* audit triggers record it) and clears `@audit_user` / `@family_mirror` before the connection goes back to the pool. The spec also requires every family write to add an `audit_logs` row; the Family API does that inside the same transaction.
+- **Where the pool is created:** `src/db/pool.ts` (`mysql2/promise` `createPool`, `utf8mb4_general_ci`, `dateStrings`).
+  - `buildApp` creates the app pool (`DB_*` account, `DB_POOL_SIZE`), exposes it as `app.db` and ends it on close.
+  - The **family module has its own pool** (`src/modules/family/db.ts`) on the same host and database, as **`family_api`** (`FAMILY_DB_USER` / `FAMILY_DB_PASSWORD`, `FAMILY_DB_POOL_SIZE`). Family routes use only that pool.
+- **Transactions:** `withTransaction(pool, work, { auditUser })` in `src/db/transaction.ts`.
+  - It runs `work(connection)` in one transaction, commits only if `work` completes, and rolls back otherwise.
+  - It sets `@audit_user` (the ra_* audit triggers record it) and clears `@audit_user` / `@family_mirror` before the connection goes back to the pool.
+  - **Every family write route uses `familyDb.transaction(work, { auditUser })`**, which is `withTransaction` on the family pool, and adds its `audit_logs` row inside that transaction.
 - **Migrations:** **this repo's own migration runner**, `scripts/family/migrate.sh` (bash plus the `mysql` CLI, so `DELIMITER` works for trigger and procedure migrations), run with `npm run migrate` (or `db:family:migrate`). The SQL files are in `migrations/family/`, applied in order. It writes rows compatible with the tenant database's existing `schema_migrations` table; its columns were checked in step 1.2. The tool that wrote the existing 131 rows (`applied_by` = `provision` / `clone-tenant-to-beta`) belongs to the PHP app and is not in this workspace.
   - Files are `migrations/family/family_NNN_<name>.sql`, each with a required `family_NNN_<name>.down.sql`. Each file holds **one DDL statement**, because MariaDB commits DDL implicitly; a failure then leaves nothing half-applied.
   - Each row records: `version` = `family_NNN`, `filename` = the up file, `checksum` = SHA-1 of the up file, `batch` = `MAX(batch) + 1` per run, and `applied_by` = `family-migrate`.
@@ -45,6 +53,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - `family_013` to `family_015` add the writing procedures `sp_family_mirror` (`SQL SECURITY DEFINER`), `sp_family_mirror_family` and `sp_family_mirror_person`.
   - `family_016` adds the 14 after-write `trg_*` triggers on the six family tables. It is the one exception to "one DDL statement per file": it uses `CREATE OR REPLACE TRIGGER` in up and `DROP TRIGGER IF EXISTS` in down, so a partly applied run can be re-run.
   - `family_022` (step 2.2) re-creates six objects so the mirror fills the legacy columns exactly as today: 28 mirrored columns (no `home_send_notification`), `*_name` = `legacy_full_name` verbatim, 0/`'voice'` without a rights row, and empty CAI values keeping a stored NULL. Its down step restores the 010–018 definitions. Committed migrations are never edited; changes go in a new migration.
+  - `family_024` makes `sp_family_preview` `SQL SECURITY DEFINER`. It only reads, and this way `family_api` needs EXECUTE on it alone, not on `sp_family_mirror_values`, which it calls.
   - `family_017` adds `sp_family_mirror_cai`. `family_018` adds the link and lock triggers `trg_children_family_bu`, `trg_children_family_au` (`PRECEDES ra_children_au`) and `trg_cai_family_bu`, grouped like `family_016`. For a linked child, a legacy write to a mirrored column is put back and logged in `family_mirror_lock_log`, with `db_user = USER()`. Other columns save normally.
   - **Mirror and audit:**
     - The `ra_*` audit triggers record mirror writes with `user_id = COALESCE(@audit_user, updated_by, created_by, 0)`. The Family API must `SET @audit_user = <admin.id>` on its connection before each write, or mirror changes are attributed to the child's last editor.
@@ -77,6 +86,12 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - Family migration versions are prefixed **`family_`**, so they never collide with the existing tool's versions.
   - Family migrations, procedures and triggers are specified in `SCHEMA.md` ("Migration SQL", "Database objects: mirror and lock").
 - **`audit_logs` (existing table):** the columns are `type`, `table_name`, `action`, `col_name`, `old_value`, `new_value`, `user_id`, `actor_type`, `actor_ref`, `device_id`, `table_id`, `entity_name`, `created_at`, `updated_at`. Every Family API write adds a row here. The `ra_*` triggers separately capture the mirror writes to `children` and `children_additional_information`. How the API fills each column has not been set up yet.
+- **Family database account (`family_api`):** `scripts/family/grants.sql` lists everything it may do, nothing else.
+  - SELECT on the 6 family tables, `children`, `children_additional_information`, `admin` and `admin_api_tokens`.
+  - INSERT, UPDATE and DELETE on the 6 family tables; UPDATE (`family_id`) on `children`; INSERT on `audit_logs`; EXECUTE on `sp_family_preview`.
+  - `npm run db:family:grants` (`scripts/family/apply-grants.sh`) creates `'family_api'@'localhost'` with `FAMILY_DB_PASSWORD`, revokes everything, and applies the file to `DB_NAME` and `DB_TEST_NAME`. `db:family:test-reset` re-applies it.
+  - A direct `UPDATE children SET father_phone = …` as `family_api` fails with error 1143 ("UPDATE command denied … for column 'father_phone'"). `test/family-db/grants.test.ts` checks the exact grant list, the refusals and the working link path.
+  - **DEFINER rule:** the mirror triggers and procedures run as their definer, the user that ran the migrations (no explicit `DEFINER`; root@localhost locally). That user must be able to write the legacy columns, `family_mirror_lock_log` and `record_audit`. `family_api` never gets those rights.
 - **Target database:** MariaDB 10.11, tenant schema from the 2026-09-24 dump, restored locally into `tendi_family_dev` by `npm run db:family:restore` (Step 1.1). Tendi-new's Playwright tests also use that script to reset the database.
   - The dump holds 209 base tables (all InnoDB), 2 views (`v_attendance_reporting`, `v_bus_route_orders`, `SQL SECURITY INVOKER`), and 312 `ra_*` audit triggers on 104 tables. The triggers write to `record_audit` using `@audit_user`. It has no stored routines, no events, no `DEFINER` clauses and no `CREATE DATABASE`/`USE`. The triggers are therefore owned by the local `DB_USER` that loads the dump, and no definer users need to exist.
   - The local database is created as `utf8mb4` / `utf8mb4_general_ci`, the collation of most tables in the dump. The production schema's default is not recorded in the dump, and the family tables in SCHEMA.md inherit the database default.
@@ -101,7 +116,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **Logging:** Fastify's built-in logger (pino, JSON lines on stdout) at `LOG_LEVEL` (default `info`); request logging is on. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
 - **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler and validation errors (400). For 5xx the message is the generic "Internal Server Error" and the details go to the log only. The schema is registered as `ErrorResponse` for routes' `response` sections.
 - **Config/env loading:** `src/config.ts` (`loadConfig`) reads `.env` (git-ignored); variables already set in the environment win. It validates the values with TypeBox at startup, and stops with `invalid configuration (see .env.example): …` if one is missing or wrong.
-  - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty values count as unset.
+  - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty values count as unset. The family module adds `FAMILY_DB_USER`, `FAMILY_DB_PASSWORD` and `FAMILY_DB_POOL_SIZE`, validated by the same `readEnvSchema` (`src/modules/family/config.ts`).
   - `.env.example` (committed) also lists the script-only keys `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, `MARIADB_BIN_DIR` and `FAMILY_DB_PERF_TARGET_MS`. The `scripts/family/*.sh` scripts and `scripts/family/lib/db.ts` keep their own `.env` readers.
 - **Scheduled jobs/cron:** chosen 2026-10-19: the **OS scheduler runs the CLI**, with no in-process scheduler and no new library. The nightly reconciliation is `npm run family:reconcile`. On Windows it is registered by `scripts/family/schedule-reconcile.ps1` (user task "Tendi family reconcile", 02:30, log in `var/family-reconcile/`); on Linux, cron (`docs/family/reconcile-runbook.md`). Single run: a MariaDB `GET_LOCK('<db>:family:reconcile')`, plus a per-night check in `family_reconcile_runs`. It switches to the Redis lock (`SET <prefix>:family:reconcile NX EX 3600`) in Step 2.3. The jobs may move into the app's scheduler after Step 0.3.
 - **Alerting/email:** not set up yet. Chosen 2026-10-19 for the reconciliation: a `WARNING` on stderr and exit code 2, which the scheduler records as a failed run. `scripts/family/reconcile/alert.ts` is the single hook to wire once an alerting channel is chosen. The PHP `notifications_queue` is the parents' SMS/voice/email queue and must not be used for staff alerts.
@@ -110,7 +125,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 
 - **Test runner:** **`node:test`** (Node 24's built-in runner, chosen 2026-10-19; no test library).
   - Tests are TypeScript, run directly by Node's type stripping. They are type-checked by `npm run typecheck`.
-  - `npm test` runs the fast tests: `test/app/` (the app through `app.inject()`; `/health` needs the local MariaDB from `.env`), `test/family-backfill/` and `test/family-proof/`.
+  - `npm test` runs the fast tests: `test/app/` (the app and the family module through `app.inject()`; needs the local MariaDB and the `family_api` account from `.env`), `test/family-backfill/` and `test/family-proof/`.
   - `npm run test:family-db` runs the database suite (see below).
 - **Lint and format:**
   - **ESLint 10** (`eslint.config.js`: `@eslint/js` recommended plus `typescript-eslint` recommended); `npm run lint` covers the whole repo.
@@ -137,6 +152,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **Database npm scripts (Step 1.1):**
   - `npm run db:family:restore [-- <dump.sql>]`: drops and recreates `DB_NAME`, loads the dump, then checks for 209 base tables, 2 views, 753 `children` rows, 749 `children_additional_information` rows, 312 `ra_*` triggers on 104 tables (via `SHOW TRIGGERS`) and 0 routines. It exits non-zero on any mismatch.
   - `npm run db:family:test-clone`: rebuilds `DB_TEST_NAME` from `DB_NAME`, including any applied family migrations and their `schema_migrations` rows, and runs the same checks. The check of 209 tables counts the dump's tables only; the 7 family tables are reported separately.
+  - `npm run db:family:grants`: creates or updates the `family_api` account and applies `scripts/family/grants.sql` (see "Family database account").
   - Both scripts refuse a `DB_HOST` other than `localhost`, `127.0.0.1` or `::1`, a database name that does not start with `tendi_family_`, and a server whose `@@hostname` is not this machine (for example a tunnel). They warn when the server is not MariaDB 10.11.9. Credentials go to `mysql` through a temporary option file, never on the command line.
 - **npm scripts for dev, test and migrations:** `npm run dev` (watch mode on port 4000), `npm test`, `npm run migrate`. See "Project basics".
 
@@ -145,8 +161,12 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **Client library:** **`redis`** 6 (node-redis, the official client). `src/redis.ts` connects only when `REDIS_URL` is set; `app.redis` is the client or `null`, and `/health` reports `redis: ok | down | disabled`. Redis itself is used from Step 2.3.
 - **Connection config:** `REDIS_URL` (for example `redis://127.0.0.1:6379`); unset or empty means no Redis.
 - **Key naming:** not set up yet.
-- **What is cached:** nothing in this repo yet. The tenant database's `redis_caches_log` table only tracks `children_attendance`. The PHP team has not yet confirmed whether any child or parent data is cached in Redis (see Open questions).
-- **Invalidation:** not set up yet. The spec says to clear cached child and parent data after mirror writes. What to clear depends on the PHP team's answer.
+- **What is cached:** **no child or parent data, as far as the database shows** (checked 2026-10-19).
+  - This backend caches nothing.
+  - The tenant's `redis_caches_log` (the PHP app's cache bookkeeping) allows a single `type`, `children_attendance` (per class), and holds no rows in the 2026-09-24 dump. Nothing marks parent data or the 28 mirrored columns as cached.
+  - The family module does not cache family data in the MVP.
+  - Still to confirm with the PHP team (open question 2): whether the PHP app keeps parent data in Redis under keys `redis_caches_log` does not track.
+- **Invalidation:** none needed today, so there is no `invalidateChildCaches` (Step 3.1 decision). If the PHP team reports parent or child keys, add `invalidateChildCaches(childIds)` with their key pattern, called after commit by every route that changes mirrored values (steps 3.5 and 3.6).
 
 ## Conventions to follow
 

@@ -26,7 +26,10 @@ export function requireEnv(name: string): string {
   return val;
 }
 
-export async function connectLocal(database: string): Promise<Connection> {
+export async function connectLocal(
+  database: string,
+  credentials?: { user: string; password: string },
+): Promise<Connection> {
   loadEnv();
   const host = requireEnv('DB_HOST');
   if (!['localhost', '127.0.0.1', '::1'].includes(host.toLowerCase())) {
@@ -39,8 +42,8 @@ export async function connectLocal(database: string): Promise<Connection> {
   const db = await mysql.createConnection({
     host,
     port: Number(requireEnv('DB_PORT')),
-    user: requireEnv('DB_USER'),
-    password: process.env.DB_PASSWORD ?? '',
+    user: credentials?.user ?? requireEnv('DB_USER'),
+    password: credentials ? credentials.password : (process.env.DB_PASSWORD ?? ''),
     database,
     charset: 'utf8mb4_general_ci',
     dateStrings: true,

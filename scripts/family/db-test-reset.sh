@@ -13,3 +13,9 @@ load_env
 DB_NAME="$DB_TEST_NAME" bash "$FAMILY_SCRIPTS_DIR/db-restore.sh"
 echo
 DB_NAME="$DB_TEST_NAME" bash "$FAMILY_SCRIPTS_DIR/migrate.sh" up
+
+# The family_api account's grants (by table name, so they survive the restore; re-applied anyway).
+if [[ -n "${FAMILY_DB_PASSWORD:-}" ]]; then
+  echo
+  bash "$FAMILY_SCRIPTS_DIR/apply-grants.sh" | grep -v '^  GRANT'
+fi
