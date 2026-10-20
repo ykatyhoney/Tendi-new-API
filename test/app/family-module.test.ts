@@ -23,4 +23,40 @@ describe('family module', () => {
       /invalid configuration.*FAMILY_DB_PASSWORD/,
     );
   });
+
+  test('the allowed staff types come from config: default admin, superadmin, office; unknown types rejected', () => {
+    const base = { FAMILY_DB_USER: 'family_api', FAMILY_DB_PASSWORD: 'x' };
+    assert.deepEqual(loadFamilyConfig({ ...base, FAMILY_ALLOWED_STAFF_TYPES: undefined }).allowedStaffTypes, [
+      'admin',
+      'superadmin',
+      'office',
+    ]);
+    assert.deepEqual(
+      loadFamilyConfig({ ...base, FAMILY_ALLOWED_STAFF_TYPES: 'admin, office ,superadmin' }).allowedStaffTypes,
+      ['admin', 'office', 'superadmin'],
+    );
+    assert.throws(
+      () => loadFamilyConfig({ ...base, FAMILY_ALLOWED_STAFF_TYPES: 'admin,offce' }),
+      /unknown admin types: offce/,
+    );
+  });
+
+  test('family API routes require a bearer token', async () => {
+    const res = await app.inject({ method: 'GET', url: '/staff/me' });
+    assert.equal(res.statusCode, 401);
+  });
+
+  test("a CORS preflight from Tendi-new's origin succeeds without a token", async () => {
+    const origin = loadConfig().corsOrigins[0];
+    assert.equal(origin, 'http://localhost:3000', "CORS_ORIGIN is Tendi-new's local URL");
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/staff/me',
+      headers: { origin, 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization' },
+    });
+    assert.equal(res.statusCode, 204);
+    assert.equal(res.headers['access-control-allow-origin'], origin);
+    assert.match(String(res.headers['access-control-allow-headers']), /authorization/i);
+    assert.equal(res.headers['www-authenticate'], undefined, 'the preflight never reaches the auth preHandler');
+  });
 });

@@ -4,17 +4,29 @@
 //
 // Layers: routes/ (HTTP: schemas, status codes) -> service/ (rules, familyDb.transaction for every
 // write) -> repository/ (SQL only, on a Queryable). Nothing here caches family data (MVP).
+//
+// Every Family API route registers inside the protected scope below, so it runs behind the staff
+// auth preHandler (bearer token, active admin, allowed staff type) and has request.staff.
+// Only GET /health/family is public.
 
 import type { FastifyInstance } from 'fastify';
+import { protectScope } from './auth.ts';
 import { loadFamilyConfig } from './config.ts';
 import { createFamilyDb } from './db.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import { registerStaffRoutes } from './routes/staff.ts';
 
 export default async function familyModule(app: FastifyInstance): Promise<void> {
-  const db = createFamilyDb(app.config.db, loadFamilyConfig());
+  const config = loadFamilyConfig();
+  const db = createFamilyDb(app.config.db, config);
   app.addHook('onClose', async () => {
     await db.pool.end();
   });
 
   registerHealthRoutes(app, db);
+
+  await app.register(async (api) => {
+    protectScope(api, db, config.allowedStaffTypes);
+    registerStaffRoutes(api);
+  });
 }

@@ -24,7 +24,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - Shared resources are decorations on the root instance: `app.config`, `app.db` (the pool) and `app.redis` (client or `null`). They are typed in `src/app.ts` and closed in an `onClose` hook.
   - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`: `health` and `family`.
   - **Family module** (`src/modules/family/`): `config.ts` (its env), `db.ts` (its pool and `familyDb.transaction`), `routes/` (HTTP: schemas, status codes), `service/` (rules; every write goes through the transaction), `repository/` (SQL only, on a `Queryable` = pool or transaction connection).
-    - Today it has `GET /health/family` (pings its pool). The Family API routes of PLAN.md are added in the following steps.
+    - Public: `GET /health/family` (pings its pool). Every other route registers inside the module's **protected scope**, which runs the staff auth preHandler (see "Auth and roles"); today that is `GET /staff/me`. The Family API routes of PLAN.md are added there in the following steps.
     - It caches no family data (MVP).
 - **Where routes live:** in their module's folder under `src/modules/` (the family module: `src/modules/family/routes/`). There is no global API prefix: `GET /health`, `GET /health/family`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`).
 - **Naming conventions:**
@@ -87,7 +87,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - Family migrations, procedures and triggers are specified in `SCHEMA.md` ("Migration SQL", "Database objects: mirror and lock").
 - **`audit_logs` (existing table):** the columns are `type`, `table_name`, `action`, `col_name`, `old_value`, `new_value`, `user_id`, `actor_type`, `actor_ref`, `device_id`, `table_id`, `entity_name`, `created_at`, `updated_at`. Every Family API write adds a row here. The `ra_*` triggers separately capture the mirror writes to `children` and `children_additional_information`. How the API fills each column has not been set up yet.
 - **Family database account (`family_api`):** `scripts/family/grants.sql` lists everything it may do, nothing else.
-  - SELECT on the 6 family tables, `children`, `children_additional_information`, `admin` and `admin_api_tokens`.
+  - SELECT on the 6 family tables, `children`, `children_additional_information`, `admin` and `admin_api_tokens`; UPDATE (`last_seen_at`) on `admin_api_tokens` (staff auth, Step 3.2).
   - INSERT, UPDATE and DELETE on the 6 family tables; UPDATE (`family_id`) on `children`; INSERT on `audit_logs`; EXECUTE on `sp_family_preview`.
   - `npm run db:family:grants` (`scripts/family/apply-grants.sh`) creates `'family_api'@'localhost'` with `FAMILY_DB_PASSWORD`, revokes everything, and applies the file to `DB_NAME` and `DB_TEST_NAME`. `db:family:test-reset` re-applies it.
   - A direct `UPDATE children SET father_phone = …` as `family_api` fails with error 1143 ("UPDATE command denied … for column 'father_phone'"). `test/family-db/grants.test.ts` checks the exact grant list, the refusals and the working link path.
@@ -104,8 +104,17 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 
 ## Auth and roles
 
-- **Current user resolution:** not set up yet. The spec says to check the bearer token's md5 against `admin_api_tokens.token_hash`, in the same form `admin.login_auth` uses, with no new login system (PLAN.md "Security, permissions and audit"). How staff obtain a token is still open (see Open questions).
-- **Role checks:** decided: the allowed `admin.type` values are **`admin`, `superadmin`, `office`**. This settles spec decision D5. It goes beyond D5's recommendation (`admin` and `office` only), and PLAN.md still lists D5 as Pending. Not set up yet.
+- **Current user resolution:** the family module's auth preHandler (`src/modules/family/auth.ts`, `service/auth.ts`), on every route in its protected scope. There is no new login system.
+  - It reads `Authorization: Bearer <token>` and looks up the token's md5 (lowercase hex) in `admin_api_tokens.token_hash` ("the same form `admin.login_auth` uses"), joined to `admin`.
+  - It requires `admin.status = 'active'`. When the request is also allowed by the role check, it updates `last_seen_at` (at most once a minute per token); a 401 or 403 leaves `last_seen_at` untouched.
+  - **No expiry check yet:** any stored token of an active admin works. The expiry rule and the hash format wait on the PHP team (open question 4); `service/auth.ts` marks the place with `TODO(php-team)`.
+  - It sets `request.staff = { adminId, type, name }` for audit logging (`@audit_user`, `audit_logs.user_id`).
+  - A missing or malformed header, an unknown token and an inactive admin all get 401 with `WWW-Authenticate: Bearer`; the last two get the same message.
+  - `GET /staff/me` returns `request.staff`. The OpenAPI document declares the `bearerAuth` scheme.
+  - How staff obtain a token is still open (see Open questions).
+- **Role checks:** after authentication, the guard allows the `admin.type` values in **`FAMILY_ALLOWED_STAFF_TYPES`** (comma-separated, checked against the `admin.type` enum at startup) and answers 403 to anything else.
+  - **Default: `admin,superadmin,office`**, as recorded at Step 0.1. Decision D5 is still to be confirmed (PLAN.md lists it as Pending and recommends `admin` and `office` only). Changing it is an env change, not a code change.
+  - `developer` and the other types get 403 unless they are added (open question 4, item 5).
 
 ## CORS
 
@@ -116,7 +125,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **Logging:** Fastify's built-in logger (pino, JSON lines on stdout) at `LOG_LEVEL` (default `info`); request logging is on. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
 - **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler and validation errors (400). For 5xx the message is the generic "Internal Server Error" and the details go to the log only. The schema is registered as `ErrorResponse` for routes' `response` sections.
 - **Config/env loading:** `src/config.ts` (`loadConfig`) reads `.env` (git-ignored); variables already set in the environment win. It validates the values with TypeBox at startup, and stops with `invalid configuration (see .env.example): …` if one is missing or wrong.
-  - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty values count as unset. The family module adds `FAMILY_DB_USER`, `FAMILY_DB_PASSWORD` and `FAMILY_DB_POOL_SIZE`, validated by the same `readEnvSchema` (`src/modules/family/config.ts`).
+  - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty or undefined values count as unset. The family module adds `FAMILY_DB_USER`, `FAMILY_DB_PASSWORD`, `FAMILY_DB_POOL_SIZE` and `FAMILY_ALLOWED_STAFF_TYPES`, validated by the same `readEnvSchema` (`src/modules/family/config.ts`).
   - `.env.example` (committed) also lists the script-only keys `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, `MARIADB_BIN_DIR` and `FAMILY_DB_PERF_TARGET_MS`. The `scripts/family/*.sh` scripts and `scripts/family/lib/db.ts` keep their own `.env` readers.
 - **Scheduled jobs/cron:** chosen 2026-10-19: the **OS scheduler runs the CLI**, with no in-process scheduler and no new library. The nightly reconciliation is `npm run family:reconcile`. On Windows it is registered by `scripts/family/schedule-reconcile.ps1` (user task "Tendi family reconcile", 02:30, log in `var/family-reconcile/`); on Linux, cron (`docs/family/reconcile-runbook.md`). Single run: a MariaDB `GET_LOCK('<db>:family:reconcile')`, plus a per-night check in `family_reconcile_runs`. It switches to the Redis lock (`SET <prefix>:family:reconcile NX EX 3600`) in Step 2.3. The jobs may move into the app's scheduler after Step 0.3.
 - **Alerting/email:** not set up yet. Chosen 2026-10-19 for the reconciliation: a `WARNING` on stderr and exit code 2, which the scheduler records as a failed run. `scripts/family/reconcile/alert.ts` is the single hook to wire once an alerting channel is chosen. The PHP `notifications_queue` is the parents' SMS/voice/email queue and must not be used for staff alerts.
@@ -182,7 +191,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - Set `children.family_id` (link, unlink, demos, fixtures, tests) only in `tendi_family_test`, never in `tendi_family_dev` (CLAUDE.md rule 7). The mirror would overwrite the dev legacy values that the backfill and the proof run read.
 - Never change or drop an existing column the PHP app reads. Only the database mirror writes the 28 mirrored legacy parent columns (`home_send_notification` stays form-owned).
 - Every family write runs in one transaction through `withTransaction` (with `auditUser`) and writes an `audit_logs` row.
-- Only `admin`, `superadmin` and `office` staff may use the Family API.
+- Only the staff types in `FAMILY_ALLOWED_STAFF_TYPES` (default `admin,superadmin,office`; D5 to be confirmed) may use the Family API. Every family route except `/health/family` goes in the module's protected scope.
 - When a step sets up or changes a convention, update this file in the same pull request.
 
 ## Open questions
@@ -190,3 +199,11 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 1. **Staff sign-in:** how does a staff member get a bearer token for the Family API? A login endpoint here would need to verify `admin.password` exactly as the PHP app hashes it. The PHP password hashing scheme is still needed.
 2. **Redis contents (PHP team):** does the PHP app cache any child or parent data in Redis, and under which keys? The invalidation after mirror writes depends on the answer. Today `redis_caches_log` only tracks `children_attendance`.
 3. ~~**2026-09-24 dump:** where will the dump come from for the Step 1.1 restore?~~ Answered on 2026-10-19: the dump is `C:\Users\admin\Downloads\raul-tendi-db-2026-09-24.sql` (SHA-1 `94678a1c04cf8b8154444de05a7a0c704c4a8d6d`, 17,514,044 bytes, MariaDB 10.11.9 dump). Byte-identical copies exist as `raul-tendi-db-2026-09-24 (2).sql` in `Downloads` and in the workspace root. Keep it out of every repository.
+4. **Staff tokens and passwords (PHP team), Step 3.2.** The Family API authenticates against `admin_api_tokens`. It assumes `token_hash` is the lowercase hex md5 of the raw token (the column comment) and has **no expiry check** until these are answered:
+   1. How is `admin_api_tokens.token_hash` computed: lowercase hex md5 of the raw token, or something else (salt, other algorithm)?
+   2. Do tokens expire? If so, by what rule (for example `last_seen_at` older than N days), and where is that enforced or pruned?
+   3. Which code creates `admin_api_tokens` rows today, and what goes in `device_id` and `app_version`?
+   4. How is `admin.password` stored, and how does the current staff login check it? Is `admin.login_auth` the same token form?
+      - The 2026-09-24 dump shows: all 14 `admin.password` values are 32-character lowercase hex in a `varchar(50)` column, which fits md5 and rules out bcrypt (60 characters).
+      - `admin.login_auth` is empty in every row, and `admin_api_tokens` has no rows (anonymized dump), so neither can be checked against data.
+   5. Should `superadmin` and `developer` accounts have access to the Families screens (decision D5)?
