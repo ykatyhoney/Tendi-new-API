@@ -11,6 +11,79 @@ async function person() {
   return (await newMember(api, await newFamily(api, 'People'), 'Avi', 'father')).person_id;
 }
 
+describe('GET /people/:id', () => {
+  test('200: the person with phones, addresses and every household, by family name', async () => {
+    const zeta = await newFamily(api, 'Zeta household', '718-555-0111');
+    const alpha = await newFamily(api, 'Alpha household', '');
+    const m = await newMember(api, zeta, 'Avi', 'father', { phone: '347-555-0101', is_primary: true });
+    const uncle = await api.ok(
+      'POST',
+      `/families/${alpha}/members`,
+      { person_id: m.person_id, relationship: 'uncle' },
+      201,
+    );
+    await api.ok('PUT', `/people/${m.person_id}/addresses`, { addresses: [{ kind: 'home', line1: '12 Elm St' }] });
+
+    const p = await api.ok('GET', `/people/${m.person_id}`);
+    assert.deepEqual([p.id, p.fname, p.legacy_full_name, p.status], [m.person_id, 'Avi', 'Avi Testerman', 'active']);
+    assert.deepEqual(
+      p.phones.map((x: { phone: string; is_primary: boolean }) => [x.phone, x.is_primary]),
+      [['347-555-0101', true]],
+    );
+    assert.deepEqual(
+      p.addresses.map((x: { line1: string }) => x.line1),
+      ['12 Elm St'],
+    );
+    assert.deepEqual(p.households, [
+      {
+        member_id: uncle.id,
+        family_id: alpha,
+        family_name: 'Alpha household',
+        household_phone: '',
+        relationship: 'uncle',
+        is_primary: false,
+      },
+      {
+        member_id: m.id,
+        family_id: zeta,
+        family_name: 'Zeta household',
+        household_phone: '718-555-0111',
+        relationship: 'father',
+        is_primary: true,
+      },
+    ]);
+  });
+
+  test('a removed membership and a trashed family are not listed', async () => {
+    const kept = await newFamily(api, 'Kept');
+    const left = await newFamily(api, 'Left');
+    const gone = await newFamily(api, 'Gone');
+    const m = await newMember(api, kept, 'Avi', 'father');
+    const leftMember = await api.ok(
+      'POST',
+      `/families/${left}/members`,
+      { person_id: m.person_id, relationship: 'uncle' },
+      201,
+    );
+    await api.ok('POST', `/families/${gone}/members`, { person_id: m.person_id, relationship: 'uncle' }, 201);
+    await api.ok('DELETE', `/families/${left}/members/${leftMember.id}`);
+    await api.db().query("UPDATE families SET status = 'trash' WHERE id = ?", [gone]);
+    const p = await api.ok('GET', `/people/${m.person_id}`);
+    assert.deepEqual(
+      p.households.map((h: { family_id: number }) => h.family_id),
+      [kept],
+    );
+  });
+
+  test('404 for an unknown or trashed person; 400 for a bad id', async () => {
+    assert.equal(await api.fails('GET', `/people/${NO_ID}`, 404), `Person ${NO_ID} not found`);
+    const id = await person();
+    await api.db().query("UPDATE people SET status = 'trash' WHERE id = ?", [id]);
+    assert.equal(await api.fails('GET', `/people/${id}`, 404), `Person ${id} not found`);
+    assert.equal((await api.request('GET', '/people/abc')).statusCode, 400);
+  });
+});
+
 describe('PATCH /people/:id', () => {
   test('200; a changed fname also sets legacy_full_name', async () => {
     const id = await person();

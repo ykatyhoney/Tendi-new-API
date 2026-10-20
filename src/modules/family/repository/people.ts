@@ -94,3 +94,26 @@ export async function replaceAddresses(db: Queryable, personId: number, addresse
     addresses.map((a) => [personId, a.kind, a.line1, a.line2, a.city, a.state, a.zip]),
   ]);
 }
+
+export interface HouseholdRow {
+  member_id: number;
+  family_id: number;
+  family_name: string;
+  household_phone: string;
+  relationship: string;
+  is_primary: number;
+}
+
+/** The active families the person is an active member of, by family name. */
+export async function householdsOf(db: Queryable, personId: number): Promise<HouseholdRow[]> {
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT fm.id AS member_id, f.id AS family_id, f.name AS family_name, f.household_phone, fm.relationship,
+            fm.is_primary
+       FROM family_members fm
+       JOIN families f ON f.id = fm.family_id AND f.status = 'active'
+      WHERE fm.person_id = ? AND fm.status = 'active'
+      ORDER BY f.name, f.id`,
+    [personId],
+  );
+  return rows as HouseholdRow[];
+}

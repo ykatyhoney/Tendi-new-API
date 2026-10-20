@@ -1,11 +1,12 @@
-// /people routes (PLAN.md "Family API"), implemented in step 3.5.
+// /people routes (PLAN.md "Family API"), implemented in step 3.5. GET /people/:id was added on
+// 2026-10-20 for the person editor (it is not in PLAN.md's table).
 
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import type { FastifyInstance } from 'fastify';
 import type { FamilyDb } from '../db.ts';
 import { PersonParams, ReplaceAddressesBody, ReplacePhonesBody, UpdatePersonBody } from '../schemas/requests.ts';
-import { replaceAddresses, replacePhones, updatePerson } from '../service/people.ts';
+import { getPerson, replaceAddresses, replacePhones, updatePerson } from '../service/people.ts';
 import { checkAddresses, checkEmail, checkPhones } from '../service/validation.ts';
 import { FAMILY_TAG, errorResponses } from './common.ts';
 
@@ -15,6 +16,22 @@ const WRITE_ERRORS = [400, 401, 403, 404];
 
 export function registerPeopleRoutes(scope: FastifyInstance, db: FamilyDb): void {
   const app = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+  app.get(
+    '/people/:id',
+    {
+      schema: {
+        operationId: 'getPerson',
+        tags: [FAMILY_TAG],
+        summary: 'A person with phones, addresses and every household they belong to',
+        description: '404 for an unknown or trashed person.',
+        security,
+        params: PersonParams,
+        response: { 200: Type.Ref('PersonDetail'), ...errorResponses(400, 401, 403, 404) },
+      },
+    },
+    async (request) => getPerson(db, request.params.id),
+  );
 
   app.patch(
     '/people/:id',

@@ -232,6 +232,171 @@
           }
         }
       },
+      "PersonHousehold": {
+        "type": "object",
+        "required": [
+          "member_id",
+          "family_id",
+          "family_name",
+          "household_phone",
+          "relationship",
+          "is_primary"
+        ],
+        "properties": {
+          "member_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "household_phone": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "father",
+              "mother",
+              "step_father",
+              "step_mother",
+              "guardian",
+              "foster_parent",
+              "grandfather",
+              "grandmother",
+              "brother",
+              "sister",
+              "uncle",
+              "aunt",
+              "cousin",
+              "nanny",
+              "babysitter",
+              "car_service",
+              "doctor",
+              "family_friend",
+              "other"
+            ],
+            "maxLength": 32,
+            "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+          },
+          "is_primary": {
+            "type": "boolean",
+            "description": "The household's primary member"
+          }
+        },
+        "description": "An active family the person is an active member of"
+      },
+      "PersonDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "legacy_full_name",
+          "hebrew_name",
+          "email",
+          "note",
+          "occupation",
+          "employer",
+          "status",
+          "phones",
+          "addresses",
+          "created_at",
+          "updated_at",
+          "households"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "fname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "legacy_full_name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Mirrored verbatim to children.father_name / mother_name. Read-only: set to \"fname lname\" for a new person, when PATCH /people/:id changes fname or lname, or with reset_legacy_full_name"
+          },
+          "hebrew_name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16777215
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occupation": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "employer": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhone"
+            }
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonAddress"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "households": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonHousehold"
+            },
+            "description": "Every active family the person is an active member of (a person can be in several), by family name. Removed memberships and trashed families are left out"
+          }
+        }
+      },
       "FamilyMember": {
         "type": "object",
         "required": [
@@ -2606,6 +2771,83 @@
       }
     },
     "/people/{id}": {
+      "get": {
+        "operationId": "getPerson",
+        "summary": "A person with phones, addresses and every household they belong to",
+        "tags": [
+          "family"
+        ],
+        "description": "404 for an unknown or trashed person.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "operationId": "updatePerson",
         "summary": "Edit a person's names, email, note, occupation or employer",

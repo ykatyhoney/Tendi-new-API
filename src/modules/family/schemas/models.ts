@@ -66,6 +66,29 @@ export const Person = Type.Object(
   { $id: 'Person' },
 );
 
+export const PersonHousehold = Type.Object(
+  {
+    member_id: Id,
+    family_id: Id,
+    family_name: Text(100),
+    household_phone: Text(255),
+    relationship: Relationship,
+    is_primary: Type.Boolean({ description: "The household's primary member" }),
+  },
+  { $id: 'PersonHousehold', description: 'An active family the person is an active member of' },
+);
+
+export const PersonDetail = Type.Object(
+  {
+    ...Person.properties,
+    households: Type.Array(Type.Ref('PersonHousehold'), {
+      description:
+        'Every active family the person is an active member of (a person can be in several), by family name. Removed memberships and trashed families are left out',
+    }),
+  },
+  { $id: 'PersonDetail' },
+);
+
 export const FamilyMember = Type.Object(
   {
     id: Id,
@@ -271,6 +294,8 @@ export const familySchemas = [
   PersonPhone,
   PersonAddress,
   Person,
+  PersonHousehold,
+  PersonDetail,
   FamilyMember,
   MirrorWarning,
   PersonResult,

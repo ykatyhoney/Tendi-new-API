@@ -24,6 +24,7 @@ const EXPECTED_OPERATIONS = {
   'POST /families/{id}/members': 'addFamilyMember',
   'PATCH /families/{id}/members/{memberId}': 'updateFamilyMember',
   'DELETE /families/{id}/members/{memberId}': 'removeFamilyMember',
+  'GET /people/{id}': 'getPerson',
   'PATCH /people/{id}': 'updatePerson',
   'PUT /people/{id}/phones': 'replacePersonPhones',
   'PUT /people/{id}/addresses': 'replacePersonAddresses',

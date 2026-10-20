@@ -10,6 +10,7 @@ import { linkedChildIdsOfPerson } from '../repository/legacy.ts';
 import {
   type AddressValues,
   findPerson,
+  householdsOf,
   type PersonRow,
   type PersonValues,
   replaceAddresses as replaceAddressRows,
@@ -109,6 +110,12 @@ async function loadPerson(db: Queryable, id: number) {
     addressesOf(db, [id]),
   ]);
   return personView(person, phones, addresses);
+}
+
+/** GET /people/:id: the person with phones, addresses and the households they belong to. */
+export async function getPerson(db: FamilyDb, id: number) {
+  const [person, households] = await Promise.all([loadPerson(db.pool, id), householdsOf(db.pool, id)]);
+  return { ...person, households: households.map((h) => ({ ...h, is_primary: bool(h.is_primary) })) };
 }
 
 /** The audit target of a people row. */

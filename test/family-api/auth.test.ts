@@ -17,6 +17,7 @@ const ROUTES: [Method, string, object?][] = [
   ['POST', `/families/${NO_ID}/members`, { relationship: 'father' }],
   ['PATCH', `/families/${NO_ID}/members/${NO_ID}`, { sort_order: 1 }],
   ['DELETE', `/families/${NO_ID}/members/${NO_ID}`],
+  ['GET', `/people/${NO_ID}`],
   ['PATCH', `/people/${NO_ID}`, { fname: 'Avi' }],
   ['PUT', `/people/${NO_ID}/phones`, { phones: [] }],
   ['PUT', `/people/${NO_ID}/addresses`, { addresses: [] }],
