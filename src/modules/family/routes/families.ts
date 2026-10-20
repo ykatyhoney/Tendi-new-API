@@ -179,9 +179,9 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
       schema: {
         operationId: 'previewChildLink',
         tags: [FAMILY_TAG],
-        summary: 'The 29 legacy parent values now and after linking the child to this family, with warnings',
+        summary: 'The 28 mirrored legacy parent values now and after linking the child to this family, with warnings',
         description:
-          '28 columns are mirrored; home_send_notification is not and shows after_link = current. 409 when the mirror refuses a value (for example one too long for its legacy column).',
+          'home_send_notification is not mirrored and not listed. 409 when the mirror refuses a value (for example one too long for its legacy column).',
         security,
         params: FamilyChildParams,
         response: { 200: Type.Ref('LinkPreview'), ...errorResponses(...READ_ERRORS, 409) },

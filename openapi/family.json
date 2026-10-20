@@ -1099,7 +1099,6 @@
         "required": [
           "column",
           "table",
-          "mirrored",
           "current",
           "after_link",
           "changed"
@@ -1124,10 +1123,6 @@
                 ]
               }
             ]
-          },
-          "mirrored": {
-            "type": "boolean",
-            "description": "false for home_send_notification only: it is not mirrored and keeps its value when linked (form-owned)"
           },
           "current": {
             "anyOf": [
@@ -1229,9 +1224,9 @@
             "items": {
               "$ref": "#/components/schemas/LegacyColumnPreview"
             },
-            "minItems": 29,
-            "maxItems": 29,
-            "description": "The 29 legacy parent columns: 11 on children, then 18 on children_additional_information. 28 are mirrored; home_send_notification is not"
+            "minItems": 28,
+            "maxItems": 28,
+            "description": "The 28 mirrored legacy parent columns: 10 on children, then 18 on children_additional_information. home_send_notification is not mirrored and not listed; linking leaves it as it is"
           },
           "warnings": {
             "type": "array",
@@ -2679,11 +2674,11 @@
     "/families/{id}/children/{childId}/preview": {
       "get": {
         "operationId": "previewChildLink",
-        "summary": "The 29 legacy parent values now and after linking the child to this family, with warnings",
+        "summary": "The 28 mirrored legacy parent values now and after linking the child to this family, with warnings",
         "tags": [
           "family"
         ],
-        "description": "28 columns are mirrored; home_send_notification is not and shows after_link = current. 409 when the mirror refuses a value (for example one too long for its legacy column).",
+        "description": "home_send_notification is not mirrored and not listed. 409 when the mirror refuses a value (for example one too long for its legacy column).",
         "parameters": [
           {
             "schema": {

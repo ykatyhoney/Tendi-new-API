@@ -237,10 +237,6 @@ export const LegacyColumnPreview = Type.Object(
   {
     column: Type.String({ description: 'The legacy column name' }),
     table: Type.Union([Type.Literal('children'), Type.Literal('children_additional_information')]),
-    mirrored: Type.Boolean({
-      description:
-        'false for home_send_notification only: it is not mirrored and keeps its value when linked (form-owned)',
-    }),
     current: legacyValue(
       'What the column holds now; null where it holds NULL or the child has no children_additional_information row',
     ),
@@ -265,10 +261,10 @@ export const LinkPreview = Type.Object(
       description: 'children.family_id now (null = unlinked; this family = already linked)',
     }),
     columns: Type.Array(Type.Ref('LegacyColumnPreview'), {
-      minItems: 29,
-      maxItems: 29,
+      minItems: 28,
+      maxItems: 28,
       description:
-        'The 29 legacy parent columns: 11 on children, then 18 on children_additional_information. 28 are mirrored; home_send_notification is not',
+        'The 28 mirrored legacy parent columns: 10 on children, then 18 on children_additional_information. home_send_notification is not mirrored and not listed; linking leaves it as it is',
     }),
     warnings: Type.Array(Type.Ref('LinkWarning')),
   },

@@ -80,7 +80,7 @@ async function audit(table: string, id: number) {
   return rows.map((r) => ({ ...r }));
 }
 
-type Column = { column: string; table: string; mirrored: boolean; current: unknown; after_link: unknown; changed: boolean };
+type Column = { column: string; table: string; current: unknown; after_link: unknown; changed: boolean };
 const col = (preview: { columns: Column[] }, name: string) => preview.columns.find((c) => c.column === name)!;
 const codes = (preview: { warnings: { code: string }[] }) => preview.warnings.map((w) => w.code);
 
@@ -252,18 +252,18 @@ describe('PUT /families/:id/children/:childId/rights', () => {
 });
 
 describe('GET /families/:id/children/:childId/preview', () => {
-  test('29 columns now and after linking; home_send_notification is shown but not mirrored', async () => {
+  test('the 28 mirrored columns now and after linking; home_send_notification is not listed', async () => {
     const childId = await freeChild();
     const { familyId } = await readyFamily('Preview', childId);
     const before = await stored(childId);
     const preview = await ok('GET', `/families/${familyId}/children/${childId}/preview`);
 
     assert.deepEqual([preview.child_id, preview.family_id, preview.linked_family_id], [childId, familyId, null]);
-    assert.equal(preview.columns.length, 29);
-    assert.equal(preview.columns.filter((c: Column) => c.table === 'children').length, 11);
+    assert.equal(preview.columns.length, 28);
+    assert.equal(preview.columns.filter((c: Column) => c.table === 'children').length, 10);
     assert.equal(preview.columns.filter((c: Column) => c.table === 'children_additional_information').length, 18);
-    const hsn = col(preview, 'home_send_notification');
-    assert.deepEqual([hsn.mirrored, hsn.changed, hsn.after_link === hsn.current], [false, false, true]);
+    assert.equal(col(preview, 'home_send_notification'), undefined);
+    assert.deepEqual(Object.keys(preview.columns[0]).sort(), ['after_link', 'changed', 'column', 'current', 'table']);
 
     assert.deepEqual(
       ['father_name', 'father_phone', 'home_phone', 'use_father_phone_for_notification', 'notification_father_phone_method', 'mother_name', 'father_fname'].map(

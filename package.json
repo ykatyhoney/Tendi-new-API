@@ -31,6 +31,7 @@
     "db:family:migrate:down": "bash scripts/family/migrate.sh down",
     "db:family:migrate:status": "bash scripts/family/migrate.sh status",
     "family:reconcile": "node scripts/family/reconcile.ts",
+    "family:dev-token": "node scripts/family/dev-token.ts",
     "db:family:grants": "bash scripts/family/apply-grants.sh"
   },
   "dependencies": {

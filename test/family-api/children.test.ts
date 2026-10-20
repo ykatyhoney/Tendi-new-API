@@ -192,17 +192,17 @@ describe('PUT /families/:id/children/:childId/rights', () => {
 });
 
 describe('GET /families/:id/children/:childId/preview', () => {
-  test('200: the 29 columns now and after linking, with warnings; writes nothing', async () => {
+  test('200: the 28 mirrored columns now and after linking, with warnings; writes nothing', async () => {
     const [childId] = await freeChildren(api, 1);
     const { familyId } = await readyFamily(api, 'Preview', [childId]);
     const before = await familyIdOf(childId);
     const preview = await api.ok('GET', `/families/${familyId}/children/${childId}/preview`);
-    assert.equal(preview.columns.length, 29);
+    assert.equal(preview.columns.length, 28);
     assert.deepEqual(
       [column(preview, 'father_phone').after_link, column(preview, 'father_name').after_link],
       ['347-555-0101', 'Avi Testerman'],
     );
-    assert.equal(column(preview, 'home_send_notification').changed, false);
+    assert.equal(column(preview, 'home_send_notification'), undefined, 'not mirrored, not listed');
     assert.deepEqual(
       preview.warnings.map((w: { code: string }) => w.code),
       ['no_mother'],

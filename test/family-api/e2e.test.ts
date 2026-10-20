@@ -29,17 +29,13 @@ const token = randomBytes(24).toString('hex');
 let children: number[] = [];
 const saved = new Map<number, { children: RowDataPacket; cai: RowDataPacket }>();
 
-const BITS = new Set([
-  'use_father_phone_for_notification',
-  'use_mother_phone_for_notification',
-  'home_send_notification',
-]);
+const BITS = new Set(['use_father_phone_for_notification', 'use_mother_phone_for_notification']);
 const select = (table: 'children' | 'children_additional_information') =>
   PREVIEW_COLUMNS.filter((c) => c.table === table).map((c) =>
     BITS.has(c.name) ? `${c.name} + 0 AS ${c.name}` : c.name,
   );
 
-/** The 29 legacy columns of a child, plus children.note (not mirrored) and family_id. */
+/** The 28 mirrored legacy columns of a child, plus children.note (not mirrored) and family_id. */
 async function legacy(childId: number) {
   const [[c]] = await root.query<RowDataPacket[]>(
     `SELECT family_id, note, ${select('children').join(', ')} FROM children WHERE id = ?`,

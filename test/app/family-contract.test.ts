@@ -71,7 +71,7 @@ describe('family API contract', () => {
     assert.deepEqual(s.ChildRight.properties.collect_to, {
       anyOf: [{ type: 'string', format: 'date' }, { type: 'null' }],
     });
-    assert.deepEqual([s.LinkPreview.properties.columns.minItems, s.LinkPreview.properties.columns.maxItems], [29, 29]);
+    assert.deepEqual([s.LinkPreview.properties.columns.minItems, s.LinkPreview.properties.columns.maxItems], [28, 28]);
     assert.deepEqual(s.LinkWarning.properties.code.enum, [...LINK_WARNING_CODES]);
   });
 

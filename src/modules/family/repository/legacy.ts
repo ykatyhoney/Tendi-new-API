@@ -26,27 +26,23 @@ export const MIRRORED_CAI_COLUMNS = (['father', 'mother'] as const).flatMap((par
 );
 
 /**
- * The 29 legacy parent columns of PLAN.md "Legacy column mapping", in preview order: the 28
- * mirrored ones plus home_send_notification, which is not mirrored (it keeps its value on link).
+ * The link preview's columns: the 28 the mirror owns, in preview order (10 on children, then 18 on
+ * children_additional_information). home_send_notification is not mirrored, so it is not part of
+ * the preview: linking leaves it as it is.
  */
 export const PREVIEW_COLUMNS = [
-  ...MIRRORED_CHILDREN_COLUMNS.map((name) => ({ name, table: 'children' as const, mirrored: true })),
-  { name: 'home_send_notification', table: 'children' as const, mirrored: false },
-  ...MIRRORED_CAI_COLUMNS.map((name) => ({ name, table: 'children_additional_information' as const, mirrored: true })),
+  ...MIRRORED_CHILDREN_COLUMNS.map((name) => ({ name, table: 'children' as const })),
+  ...MIRRORED_CAI_COLUMNS.map((name) => ({ name, table: 'children_additional_information' as const })),
 ];
 
-const BIT_COLUMNS = new Set([
-  'use_father_phone_for_notification',
-  'use_mother_phone_for_notification',
-  'home_send_notification',
-]);
+const BIT_COLUMNS = new Set(['use_father_phone_for_notification', 'use_mother_phone_for_notification']);
 
 export type LegacyValue = string | number | null;
 
 /** A bit(1) comes back as a Buffer; everything else as stored. */
 const legacyValue = (v: unknown): LegacyValue => (Buffer.isBuffer(v) ? v[0] : ((v as LegacyValue | undefined) ?? null));
 
-/** The 29 columns as stored (CAI columns NULL without a children_additional_information row), or null for no child. */
+/** The 28 mirrored columns as stored (CAI columns NULL without a children_additional_information row), or null for no child. */
 export async function storedLegacyValues(db: Queryable, childId: number): Promise<Record<string, LegacyValue> | null> {
   const columns = PREVIEW_COLUMNS.map(({ name, table }) => {
     const column = `${table === 'children' ? 'c' : 'cai'}.${name}`;

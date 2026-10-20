@@ -1,10 +1,10 @@
 // Linking a child (PLAN.md "Mirror and lock behavior", "React screens: Link child"): the preview of
-// the 29 legacy parent columns before and after linking, link (children.family_id = the family)
-// and unlink (back to NULL).
+// the 28 mirrored legacy parent columns before and after linking, link (children.family_id = the
+// family) and unlink (back to NULL).
 //
 // Setting family_id fires trg_children_family_bu / _au, which write the 28 mirrored columns in the
 // same statement; unlinking leaves every column as it is, and the child form owns them again.
-// home_send_notification is not mirrored: the preview shows it unchanged.
+// home_send_notification is not mirrored, so it is not in the preview: linking leaves it as it is.
 //
 // Lock order, as every family write: the family row, then the child row (link). Unlink locks the
 // child row only, since setting family_id to NULL fires no mirror.
@@ -82,7 +82,7 @@ async function linkWarnings(db: Queryable, family: FamilyRow, child: ChildRow): 
   return warnings;
 }
 
-/** The 29 columns now and once linked to `family`, with the warnings (LinkPreview). */
+/** The 28 mirrored columns now and once linked to `family`, with the warnings (LinkPreview). */
 async function buildPreview(db: Queryable, family: FamilyRow, child: ChildRow) {
   const [stored, mirrored, warnings] = await Promise.all([
     storedLegacyValues(db, child.id),
@@ -90,13 +90,12 @@ async function buildPreview(db: Queryable, family: FamilyRow, child: ChildRow) {
     linkWarnings(db, family, child),
   ]);
   if (!stored) throw new HttpError(404, `Child ${child.id} not found`);
-  const columns = PREVIEW_COLUMNS.map(({ name, table, mirrored: isMirrored }) => {
+  const columns = PREVIEW_COLUMNS.map(({ name, table }) => {
     const current = stored[name];
-    const afterLink = isMirrored ? (mirrored[name] ?? null) : current;
+    const afterLink = mirrored[name] ?? null;
     return {
       column: name,
       table,
-      mirrored: isMirrored,
       current,
       after_link: afterLink,
       changed: current !== afterLink,
@@ -151,7 +150,7 @@ export async function linkChild(db: FamilyDb, staff: Staff, familyId: number, ch
   );
 }
 
-/** POST /children/:childId/unlink: family_id back to NULL; the 29 columns keep their values. */
+/** POST /children/:childId/unlink: family_id back to NULL; every legacy parent column keeps its value. */
 export async function unlinkChild(db: FamilyDb, staff: Staff, childId: number) {
   // invalidateChildCaches([childId]) belongs after this commit once it exists (see linkChild).
   return conflictsAs409(() =>
