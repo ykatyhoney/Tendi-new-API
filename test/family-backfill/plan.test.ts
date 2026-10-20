@@ -6,6 +6,7 @@ import { describe, test } from 'node:test';
 import { planBackfill } from '../../scripts/family/backfill/plan.ts';
 import type { LegacyChild } from '../../scripts/family/backfill/plan.ts';
 import { normalizePhone } from '../../scripts/family/lib/phone.ts';
+import { PHONE_CASES } from '../support/phone-cases.ts';
 
 function child(id: number, over: Partial<LegacyChild> = {}, cai: Record<string, string> = {}): LegacyChild {
   return {
@@ -19,26 +20,13 @@ function child(id: number, over: Partial<LegacyChild> = {}, cai: Record<string, 
 const codes = (plan: ReturnType<typeof planBackfill>) => plan.review.map((r) => r.code).sort();
 
 describe('normalizePhone', () => {
-  test('digits only, last 10', () => {
-    assert.equal(normalizePhone('718-555-0199'), '7185550199');
-    assert.equal(normalizePhone('+1 (718) 555-0199'), '7185550199');
-  });
-
-  test('an extension and everything after it is dropped', () => {
-    assert.equal(normalizePhone('718-555-0199 x12'), '7185550199');
-    assert.equal(normalizePhone('718-555-0199x12'), '7185550199');
-    assert.equal(normalizePhone('(718) 555-0199 ext 4455'), '7185550199');
-    assert.equal(normalizePhone('718.555.0199 Ext. 7'), '7185550199');
-    assert.equal(normalizePhone('718 555 0199 #301'), '7185550199');
-    assert.equal(normalizePhone('+1 718 555 0199 X 2 (evenings)'), '7185550199');
-  });
-
-  test('fewer than 10 digits gives empty', () => {
-    assert.equal(normalizePhone('555-0199'), '');
-    assert.equal(normalizePhone('555-0199 x1234'), '', 'extension digits do not make up the missing digits');
-    assert.equal(normalizePhone('000'), '');
-    assert.equal(normalizePhone(null), '');
-  });
+  for (const rule of new Set(PHONE_CASES.map((c) => c.rule))) {
+    test(rule, () => {
+      for (const c of PHONE_CASES.filter((x) => x.rule === rule)) {
+        assert.equal(normalizePhone(c.input), c.expected, c.note ?? String(c.input));
+      }
+    });
+  }
 });
 
 describe('planBackfill', () => {
