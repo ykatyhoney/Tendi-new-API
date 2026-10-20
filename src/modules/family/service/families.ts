@@ -17,6 +17,7 @@ import {
   insertFamily,
   membersOf,
   phonesOf,
+  type RightRowDb,
   rightsOfFamily,
   searchFamilies as searchFamilyRows,
   updateFamily as updateFamilyRow,
@@ -108,24 +109,25 @@ export async function familyDetail(db: Queryable, family: FamilyRow) {
     members: members.map((m) => memberView(m, phones, addresses)),
     children: children.map((c) => ({
       ...childFields(c),
-      rights: rights
-        .filter((r) => r.child_id === c.id)
-        .map((r) => ({
-          id: r.id,
-          member_id: r.member_id,
-          child_id: r.child_id,
-          is_primary: bool(r.is_primary),
-          receives_notifications: bool(r.receives_notifications),
-          notify_method: r.notify_method,
-          may_collect: bool(r.may_collect),
-          collect_from: r.collect_from,
-          collect_to: r.collect_to,
-          is_emergency: bool(r.is_emergency),
-          is_payment_responsible: bool(r.is_payment_responsible),
-        })),
+      rights: rights.filter((r) => r.child_id === c.id).map(rightView),
     })),
   };
 }
+
+/** A family_member_children row as the API returns it (ChildRight). */
+export const rightView = (r: RightRowDb) => ({
+  id: r.id,
+  member_id: r.member_id,
+  child_id: r.child_id,
+  is_primary: bool(r.is_primary),
+  receives_notifications: bool(r.receives_notifications),
+  notify_method: r.notify_method,
+  may_collect: bool(r.may_collect),
+  collect_from: r.collect_from,
+  collect_to: r.collect_to,
+  is_emergency: bool(r.is_emergency),
+  is_payment_responsible: bool(r.is_payment_responsible),
+});
 
 const notFound = (id: number) => new HttpError(404, `Family ${id} not found`);
 

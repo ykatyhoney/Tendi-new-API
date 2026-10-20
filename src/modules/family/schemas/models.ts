@@ -7,6 +7,7 @@ import {
   AddressKind,
   DateTime,
   Id,
+  LinkWarningCode,
   NotifyMethod,
   NullableDate,
   PhoneChannel,
@@ -195,58 +196,58 @@ export const FamilySearchResult = Type.Object(
   { $id: 'FamilySearchResult' },
 );
 
-const nullableText = (maxLength: number) => Type.Union([Type.String({ maxLength }), Type.Null()]);
-const nullableBit = Type.Union([Type.Literal(0), Type.Literal(1), Type.Null()]);
-const nullableNotify = Type.Union([NotifyMethod, Type.Null()]);
-
-/**
- * The 28 legacy parent columns the mirror owns, typed like the columns (children: 10;
- * children_additional_information: 18, NULL where the child has no such row or the row holds
- * NULL). home_send_notification is not mirrored and not part of the preview.
- */
-export const LegacyParentValues = Type.Object(
+export const ChildRightsResult = Type.Object(
   {
-    father_name: Text(100),
-    mother_name: Text(100),
-    father_phone: Text(255),
-    mother_phone: Text(255),
-    home_phone: Text(255),
-    parent_email: Text(255),
-    use_father_phone_for_notification: nullableBit,
-    use_mother_phone_for_notification: nullableBit,
-    notification_father_phone_method: nullableNotify,
-    notification_mother_phone_method: nullableNotify,
-    father_fname: nullableText(100),
-    father_lname: nullableText(100),
-    father_home_phone: nullableText(30),
-    father_email: nullableText(150),
-    father_address: nullableText(255),
-    father_occupation: nullableText(150),
-    father_employer: nullableText(150),
-    father_work_address: nullableText(255),
-    father_office_phone: nullableText(30),
-    mother_fname: nullableText(100),
-    mother_lname: nullableText(100),
-    mother_home_phone: nullableText(30),
-    mother_email: nullableText(150),
-    mother_address: nullableText(255),
-    mother_occupation: nullableText(150),
-    mother_employer: nullableText(150),
-    mother_work_address: nullableText(255),
-    mother_office_phone: nullableText(30),
+    rights: Type.Array(Type.Ref('ChildRight'), {
+      description: "Rights rows of the family's active members for the child, by member sort_order",
+    }),
+    ...warning,
   },
-  { $id: 'LegacyParentValues' },
+  { $id: 'ChildRightsResult' },
+);
+
+/** A legacy column value: text, a bit as 0 / 1, an enum, or NULL. */
+const legacyValue = (description: string) =>
+  Type.Union([Type.String({ maxLength: 255 }), Type.Integer(), Type.Null()], { description });
+
+export const LegacyColumnPreview = Type.Object(
+  {
+    column: Type.String({ description: 'The legacy column name' }),
+    table: Type.Union([Type.Literal('children'), Type.Literal('children_additional_information')]),
+    mirrored: Type.Boolean({
+      description:
+        'false for home_send_notification only: it is not mirrored and keeps its value when linked (form-owned)',
+    }),
+    current: legacyValue(
+      'What the column holds now; null where it holds NULL or the child has no children_additional_information row',
+    ),
+    after_link: legacyValue(
+      'What it holds once the child is linked to this family (the mirror creates a missing children_additional_information row)',
+    ),
+    changed: Type.Boolean({ description: 'after_link differs from current' }),
+  },
+  { $id: 'LegacyColumnPreview' },
+);
+
+export const LinkWarning = Type.Object(
+  { code: LinkWarningCode, message: Type.String() },
+  { $id: 'LinkWarning', description: 'Something staff should check before linking; never blocks the preview' },
 );
 
 export const LinkPreview = Type.Object(
   {
     child_id: Id,
     family_id: Id,
-    current: Type.Ref('LegacyParentValues', {
-      description: 'What children / children_additional_information hold now',
+    linked_family_id: Type.Union([Id, Type.Null()], {
+      description: 'children.family_id now (null = unlinked; this family = already linked)',
     }),
-    after_link: Type.Ref('LegacyParentValues', { description: 'What the mirror would write when linked' }),
-    changed: Type.Array(Type.String(), { description: 'Columns whose value would change' }),
+    columns: Type.Array(Type.Ref('LegacyColumnPreview'), {
+      minItems: 29,
+      maxItems: 29,
+      description:
+        'The 29 legacy parent columns: 11 on children, then 18 on children_additional_information. 28 are mirrored; home_send_notification is not',
+    }),
+    warnings: Type.Array(Type.Ref('LinkWarning')),
   },
   { $id: 'LinkPreview' },
 );
@@ -277,11 +278,13 @@ export const familySchemas = [
   PhonesResult,
   AddressesResult,
   ChildRight,
+  ChildRightsResult,
   FamilyChild,
   Family,
   FamilySummary,
   FamilySearchResult,
-  LegacyParentValues,
+  LegacyColumnPreview,
+  LinkWarning,
   LinkPreview,
   LinkResult,
   StaffMember,

@@ -65,7 +65,7 @@ async function legacy(childId: number) {
   return { ...row };
 }
 
-/** A rights row written directly (the rights route arrives in step 3.6). */
+/** A rights row written directly, so these tests do not depend on the rights route (step 3.6). */
 async function right(memberId: number, childId: number, flags: Record<string, unknown> = {}): Promise<number> {
   const columns = {
     receives_notifications: 0,

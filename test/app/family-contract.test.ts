@@ -7,6 +7,7 @@ import { buildApp, OPENAPI_JSON_PATH } from '../../src/app.ts';
 import { loadConfig } from '../../src/config.ts';
 import {
   ADDRESS_KINDS,
+  LINK_WARNING_CODES,
   NOTIFY_METHODS,
   PHONE_CHANNELS,
   RELATIONSHIPS,
@@ -68,7 +69,8 @@ describe('family API contract', () => {
     assert.deepEqual(s.ChildRight.properties.collect_to, {
       anyOf: [{ type: 'string', format: 'date' }, { type: 'null' }],
     });
-    assert.deepEqual(Object.keys(s.LegacyParentValues.properties).length, 28);
+    assert.deepEqual([s.LinkPreview.properties.columns.minItems, s.LinkPreview.properties.columns.maxItems], [29, 29]);
+    assert.deepEqual(s.LinkWarning.properties.code.enum, [...LINK_WARNING_CODES]);
   });
 
   test('phone_normalized is not part of the phone request body', async () => {

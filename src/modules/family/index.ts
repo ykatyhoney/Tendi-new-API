@@ -1,6 +1,6 @@
 // Family module (PLAN.md "Family API"): its own config, pool (family_api), service layer and
 // repository layer. Routes live in routes/ and register here; the Family API routes
-// (/families, /people/:id, /children/:childId/unlink, ...) are added in the following steps.
+// (/families, /people/:id, /children/:childId/unlink, ...) are all implemented (step 3.6).
 //
 // Layers: routes/ (HTTP: schemas, status codes) -> service/ (rules, familyDb.transaction for every
 // write) -> repository/ (SQL only, on a Queryable). Nothing here caches family data (MVP).
@@ -35,6 +35,6 @@ export default async function familyModule(app: FastifyInstance): Promise<void> 
     registerStaffRoutes(api);
     registerFamilyRoutes(api, db);
     registerPeopleRoutes(api, db);
-    registerChildrenRoutes(api);
+    registerChildrenRoutes(api, db);
   });
 }

@@ -40,6 +40,16 @@ export const PHONE_CHANNELS = ['none', 'sms', 'voice', 'both'] as const; // peop
 export const PHONE_LABELS = ['mobile', 'home', 'work'] as const; // people_phones.label (varchar(32))
 export const ADDRESS_KINDS = ['home', 'work', 'billing'] as const; // people_addresses.kind (varchar(32))
 
+/** What the link preview warns about (GET /families/:id/children/:childId/preview). */
+export const LINK_WARNING_CODES = [
+  'linked_to_other_family', // children.family_id is another family: linking moves the child (force=move)
+  'no_rights', // no active member has a rights row for the child: link answers 409
+  'no_father', // no active father / step_father: the father_* columns become empty
+  'no_mother', // no active mother / step_mother: the mother_* columns become empty
+  'no_primary_phone', // a parent slot's person has no primary phone: father_phone / mother_phone become empty
+  'no_payment_responsible', // nobody is payment-responsible for the child: parent_email is the primary member's
+] as const;
+
 const stringEnum = <T extends readonly string[]>(values: T, maxLength: number, description: string) =>
   Type.Unsafe<T[number]>({ type: 'string', enum: [...values], maxLength, description });
 
@@ -53,6 +63,7 @@ export const NotifyMethod = stringEnum(NOTIFY_METHODS, 5, 'family_member_childre
 export const PhoneChannel = stringEnum(PHONE_CHANNELS, 5, 'people_phones.channel');
 export const PhoneLabel = stringEnum(PHONE_LABELS, 32, 'people_phones.label');
 export const AddressKind = stringEnum(ADDRESS_KINDS, 32, 'people_addresses.kind');
+export const LinkWarningCode = stringEnum(LINK_WARNING_CODES, 32, 'What the warning is about');
 
 /** A row id (int(11), auto-increment). */
 export const Id = Type.Integer({ minimum: 1, maximum: 2147483647 });

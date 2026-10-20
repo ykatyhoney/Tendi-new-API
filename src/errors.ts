@@ -31,7 +31,7 @@ export function errorBody(statusCode: number, message: string) {
 export function registerErrorHandling(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode !== undefined && error.statusCode >= 400 ? error.statusCode : 500;
-    // A deliberate HttpError (e.g. 501 "not implemented yet") keeps its message; any other 5xx is
+    // A deliberate HttpError keeps its message, even with a 5xx status; any other 5xx is
     // unexpected, so the client gets the generic text and the details go to the log.
     const expose = statusCode < 500 || error instanceof HttpError;
     if (!expose) request.log.error({ err: error }, 'request failed');

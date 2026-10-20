@@ -2,7 +2,7 @@
 
 Fastify backend for Tendi. It owns the family database objects (migrations, procedures, triggers), the backfill scripts and the Family API. Tendi-new (Next.js) reaches data only through this API over HTTP.
 
-**State as of 2026-10-19 (Step 3.1):** the Fastify app (`src/`) has the family module with its own `family_api` pool, transaction helper and `GET /health/family`; the Family API routes come next. The family database layer is in `migrations/family/` and `scripts/family/`. Each bullet below gives the decision taken, what exists, or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. Update this file in the same pull request that sets each item up.
+**State as of 2026-10-20 (Step 3.6):** the Fastify app (`src/`) has the family module with its own `family_api` pool, transaction helper and `GET /health/family`, and every Family API route of PLAN.md is implemented. The family database layer is in `migrations/family/` and `scripts/family/`. Each bullet below gives the decision taken, what exists, or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. Update this file in the same pull request that sets each item up.
 
 **Steps 1.1–2.2 were done before Step 0.3**, on `family/2.1-backfill` and `family/2.2-proof-run`. Step 0.3 (`family/0.3-app-scaffold`) added the app around them and left their scripts, migrations and tests as they were.
 
@@ -12,7 +12,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **npm scripts:** `dev` (`node --watch src/server.ts`), `build` (`tsc -p tsconfig.build.json` into `dist/`), `start` (`node dist/server.js`), `test` (fast tests, see "Tests and CI"), `typecheck`, `lint`, `format`, `format:check`, `migrate` (alias of `db:family:migrate`) and `export:openapi`, plus the family database scripts (see "Local development"). npm runs the `.sh` scripts with `bash`, which must resolve to Git Bash (`C:\Program Files\Git\usr\bin\bash.exe`), not WSL.
 - **Module format:** `"type": "module"` (ESM), with `"engines": { "node": ">=24" }`.
 - **Local port:** **4000** (`PORT`, default 4000), listening on `HOST` (default `127.0.0.1`).
-- **Git:** its own repository, remote `https://github.com/ykatyhoney/Tendi-new-API.git`. One branch per step: `family/2.1-backfill`, `family/2.2-proof-run`, `family/0.3-app-scaffold`. Nothing has been pushed. The workspace root (`Tendi/`) is **not** a git repository, so `../docs/family-module/` is not under version control.
+- **Git:** its own repository, remote `https://github.com/ykatyhoney/Tendi-new-API.git`. Steps up to 3.5 had one branch and pull request each (`family/<step>-<slug>`). **Since 2026-10-20 all work is committed directly on `main`**; no new branches. The workspace root (`Tendi/`) is **not** a git repository, so `../docs/family-module/` is not under version control.
 - **Docker:** decided: none. No Docker and no Dockerfile.
 
 ## Fastify and code layout
@@ -25,7 +25,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`: `health` and `family`.
   - **Family module** (`src/modules/family/`): `config.ts` (its env), `db.ts` (its pool and `familyDb.transaction`), `routes/` (HTTP: schemas, status codes), `service/` (rules; every write goes through the transaction), `repository/` (SQL only, on a `Queryable` = pool or transaction connection).
     - **Implemented (step 3.4):** `GET /families`, `POST /families`, `GET /families/:id`, `PATCH /families/:id` (`service/families.ts`, `repository/families.ts`).
-    - **Implemented (step 3.5):** the member routes `POST /families/:id/members`, `PATCH` / `DELETE /families/:id/members/:memberId` (`service/members.ts`, `repository/members.ts`) and the people routes `PATCH /people/:id`, `PUT /people/:id/phones`, `PUT /people/:id/addresses` (`service/people.ts`, `repository/people.ts`). Rights, preview, link and unlink still answer 501.
+    - **Implemented (step 3.5):** the member routes `POST /families/:id/members`, `PATCH` / `DELETE /families/:id/members/:memberId` (`service/members.ts`, `repository/members.ts`) and the people routes `PATCH /people/:id`, `PUT /people/:id/phones`, `PUT /people/:id/addresses` (`service/people.ts`, `repository/people.ts`).
       - **Search (`q`, `page`, `pageSize`):** `q` is trimmed and needs at least 2 characters (400 otherwise). `pageSize` defaults to 25, at most 100 (400 above). `q` made of phone characters is a phone search, on `people_phones.phone_normalized` and `families.household_phone_normalized`:
         - 10 or more digits (after dropping an extension): exact match on the normalized 10 digits;
         - 4–9 digits: those digits at the end of the normalized phone (`LIKE '%digits'`);
@@ -55,6 +55,12 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
         - when `PATCH /people/:id` actually changes `fname` or `lname` (sending the stored values is no change), audited like any column, so the linked children's `father_name` / `mother_name` show the edited name;
         - with `reset_legacy_full_name: true`.
       - **Phone and address lists:** `PUT` phones / addresses replace the whole list (delete and insert in one transaction) and set the person's `updated_by` / `updated_at`; `phone_normalized` is computed with `normalizePhone`.
+    - **Implemented (step 3.6):** `PUT /families/:id/children/:childId/rights` (`service/rights.ts`, `repository/rights.ts`), `GET /families/:id/children/:childId/preview`, `POST /families/:id/children/:childId/link` and `POST /children/:childId/unlink` (`service/link.ts`, `repository/children.ts`).
+      - **Rights:** the body is the full set for the child in this family. Each `member_id` must be an active member of the family (400 `rights/<i>/member_id: … is not an active member …`, the whole request rolled back). A listed member's row is inserted or updated in place (`uniq_fmc`, the row id stays); rows of active members not listed are deleted. A removed (trashed) member's rows are kept, as in step 3.5. Audit: `create` writes `member_id`, `child_id` and the 8 rights columns; `update` only the changed columns; `delete` one row per column with `new_value` NULL; `entity_name` "Family <name>: child <id>". When the child is linked to this family, the response carries the mirror warning. The response is `ChildRightsResult` (rights of active members, by `sort_order`).
+      - **Preview (`LinkPreview`):** one entry per legacy column, **29**: the 11 `children` columns, then the 18 `children_additional_information` columns, each `{ column, table, mirrored, current, after_link, changed }`. `after_link` comes from `sp_family_preview(child, family)`. `home_send_notification` has `mirrored: false` and `after_link = current`, because it is not mirrored. Bits are 0 / 1, and a child without a CAI row has `current` null for those 18 columns (the mirror creates the row on link, D4). `changed` is strict equality. `linked_family_id` is `children.family_id` now. `warnings` (`LINK_WARNING_CODES`, in this order): `linked_to_other_family`, `no_rights`, `no_father`, `no_mother`, `no_primary_phone` (per filled slot without a primary phone), `no_payment_responsible`. The slots are chosen as `sp_family_mirror_values` chooses them (`repository/children.ts` `parentSlots`). The preview writes nothing.
+      - **Link:** locks the family row, then the child row. 409 when the child is already linked to this family, when it is linked to another family without `?force=move` (`force` accepts only `move`; anything else is 400), or when no active member of the family has a rights row for it. Then `UPDATE children SET family_id`, one `audit_logs` row (`table_name = 'children'`, `action = 'link'`, `col_name = 'family_id'`, old value the previous family or NULL), and the response is the preview read again inside the transaction, so every column shows `changed: false`.
+      - **Unlink:** locks the child row only (setting NULL fires no mirror). 409 when it is not linked. `family_id` becomes NULL, every legacy value stays, and one `audit_logs` row with `action = 'unlink'` is written. Returns `LinkResult`.
+      - **Database conflicts → 409 (`service/db-errors.ts`, used by these four routes):** a mirror `SIGNAL` (errno 1644) passes its `MESSAGE_TEXT` on (e.g. "Family value too long for children_additional_information.father_email (150), child 12"). FK errors 1451 / 1452 and duplicate keys (1062) get a message naming the constraint or key. The earlier routes keep their own handling.
     - Public: `GET /health/family` (pings its pool). Every other route registers inside the module's **protected scope**, which runs the staff auth `onRequest` hook (see "Auth and roles"); today that is `GET /staff/me`. The Family API routes of PLAN.md are added there in the following steps.
     - It caches no family data (MVP).
 - **Where routes live:** in their module's folder under `src/modules/` (the family module: `src/modules/family/routes/`). There is no global API prefix: `GET /health`, `GET /health/family`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`).
@@ -149,7 +155,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - **@fastify/swagger / OpenAPI:** `@fastify/swagger` 9 builds an **OpenAPI 3.1.0** document from the route schemas. It is 3.1 because nullable fields are JSON Schema `{"type": "null"}` unions.
   - **Stable local URL: `http://localhost:4000/openapi.json`** (`GET /openapi.json`, hidden from the document itself). `npm run export:openapi` writes it to **`openapi/family.json`** (committed), which Tendi-new generates its types from (its step 4.1).
   - Shared schemas appear under `components.schemas` by their `$id`. The staff token is the `bearerAuth` security scheme.
-  - Since step 3.3 it describes every endpoint of the PLAN.md table, plus `GET /staff/me` and `GET /health/family`. Routes whose handler is not built yet answer **501** `"<operationId> is not implemented yet"` behind the staff auth; their contract is final.
+  - Since step 3.3 it describes every endpoint of the PLAN.md table, plus `GET /staff/me` and `GET /health/family`. Since step 3.6 every one is implemented; there are no 501 responses. Step 3.6 changed the contract of the four rights / link routes (frontend-facing): `LinkPreview` became the per-column list with `warnings` (`LegacyParentValues` is gone), `linkChild` returns `LinkPreview` instead of `LinkResult` and takes `?force=move`, and `setChildRights` returns `ChildRightsResult` (with the optional mirror `warning`).
 
 ## Auth and roles
 
@@ -173,9 +179,9 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 
 - **Logging:** Fastify's built-in logger (pino, JSON lines on stdout) at `LOG_LEVEL` (default `info`); request logging is on. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
 - **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler, validation errors (400) and the rule checks (400).
-  - Deliberate errors are `HttpError(statusCode, message)` and keep their message, including 501.
+  - Deliberate errors are `HttpError(statusCode, message)` and keep their message.
   - Any other 5xx answers the generic "Internal Server Error", and the details go to the log only.
-  - The schema is registered as `ErrorResponse`; routes list it for 400/401/403/404/409/501.
+  - The schema is registered as `ErrorResponse`; routes list it for 400/401/403/404/409.
 - **Config/env loading:** `src/config.ts` (`loadConfig`) reads `.env` (git-ignored); variables already set in the environment win. It validates the values with TypeBox at startup, and stops with `invalid configuration (see .env.example): …` if one is missing or wrong.
   - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty or undefined values count as unset. The family module adds `FAMILY_DB_USER`, `FAMILY_DB_PASSWORD`, `FAMILY_DB_POOL_SIZE` and `FAMILY_ALLOWED_STAFF_TYPES`, validated by the same `readEnvSchema` (`src/modules/family/config.ts`).
   - `.env.example` (committed) also lists the script-only keys `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, `MARIADB_BIN_DIR` and `FAMILY_DB_PERF_TARGET_MS`. The `scripts/family/*.sh` scripts and `scripts/family/lib/db.ts` keep their own `.env` readers.
@@ -228,7 +234,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - The tenant's `redis_caches_log` (the PHP app's cache bookkeeping) allows a single `type`, `children_attendance` (per class), and holds no rows in the 2026-09-24 dump. Nothing marks parent data or the 28 mirrored columns as cached.
   - The family module does not cache family data in the MVP.
   - Still to confirm with the PHP team (open question 2): whether the PHP app keeps parent data in Redis under keys `redis_caches_log` does not track.
-- **Invalidation:** none needed today, so there is no `invalidateChildCaches` (Step 3.1 decision). If the PHP team reports parent or child keys, add `invalidateChildCaches(childIds)` with their key pattern and call it from `withMirrorWarning` (`service/mirror-watch.ts`), which every write that can change mirrored values already runs after commit with the affected child ids.
+- **Invalidation:** none needed today, so there is no `invalidateChildCaches` (Step 3.1 decision). If the PHP team reports parent or child keys, add `invalidateChildCaches(childIds)` with their key pattern and call it from `withMirrorWarning` (`service/mirror-watch.ts`), which every write that can change mirrored values already runs after commit with the affected child ids (including the rights route). Link and unlink do not go through it: `linkChild` / `unlinkChild` in `service/link.ts` mark where to call it with `[childId]`.
 
 ## Conventions to follow
 
@@ -239,7 +245,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - Every migration goes through this repo's runner, with a version prefixed `family_` and a row in `schema_migrations`.
 - Do not share code with Tendi-new. The contract is `openapi/family.json`.
 - Read the spec from `../docs/family-module/` (single copy). Do not copy it into this repo.
-- One step = one branch `family/<step>-<slug>` = one pull request.
+- Commit directly on `main` (since 2026-10-20); do not create step branches.
 - Never run anything against production. Use the local database restored from the 2026-09-24 dump.
 - Set `children.family_id` (link, unlink, demos, fixtures, tests) only in `tendi_family_test`, never in `tendi_family_dev` (CLAUDE.md rule 7). The mirror would overwrite the dev legacy values that the backfill and the proof run read.
 - Never change or drop an existing column the PHP app reads. Only the database mirror writes the 28 mirrored legacy parent columns (`home_send_notification` stays form-owned).

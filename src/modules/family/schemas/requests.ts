@@ -183,5 +183,21 @@ export const ChildRightInput = body({
 
 export const SetChildRightsBody = body(
   { rights: Type.Array(ChildRightInput, { maxItems: 50 }) },
-  { description: 'The full set for this child in this family; collect_to >= collect_from.' },
+  {
+    description:
+      "The full set for this child in this family: each member_id an active member of the family, at most once; collect_to >= collect_from. Rows of active members not in the list are deleted (a removed member's rows are kept).",
+  },
+);
+
+// --- Link -----------------------------------------------------------------------------------------
+
+export const LinkChildQuery = Type.Object(
+  {
+    force: Type.Optional(
+      Type.Literal('move', {
+        description: 'Required to move a child that is linked to another family to this one',
+      }),
+    ),
+  },
+  { additionalProperties: false },
 );

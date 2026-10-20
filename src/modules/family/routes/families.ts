@@ -1,5 +1,5 @@
-// /families routes (PLAN.md "Family API"). Search, detail, create and edit (step 3.4) and the member
-// routes (step 3.5) are implemented; the others answer 501 until their step.
+// /families routes (PLAN.md "Family API"): search, detail, create and edit (step 3.4), the member
+// routes (step 3.5), and rights, link preview and link (step 3.6).
 
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
@@ -10,6 +10,7 @@ import {
   FamilyChildParams,
   FamilyMemberParams,
   FamilyParams,
+  LinkChildQuery,
   SearchFamiliesQuery,
   SetChildRightsBody,
   UpdateFamilyBody,
@@ -17,9 +18,11 @@ import {
 } from '../schemas/requests.ts';
 import type { FamilyDb } from '../db.ts';
 import { createFamily, getFamily, searchFamilies, updateFamily } from '../service/families.ts';
+import { linkChild, previewLink } from '../service/link.ts';
 import { addMember, removeMember, updateMember } from '../service/members.ts';
+import { setChildRights } from '../service/rights.ts';
 import { checkAddMember, checkHouseholdPhone, checkRights } from '../service/validation.ts';
-import { FAMILY_TAG, READ_ERRORS, WRITE_ERRORS, errorResponses, notImplemented } from './common.ts';
+import { FAMILY_TAG, READ_ERRORS, WRITE_ERRORS, errorResponses } from './common.ts';
 
 const security = [{ bearerAuth: [] }];
 
@@ -158,16 +161,16 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
         tags: [FAMILY_TAG],
         summary: "Set every member's rights for one child (notifications, collection, emergency, payment)",
         security,
+        description:
+          "Each member_id must be an active member of the family (400 otherwise). Inserts or updates each member's row (uniq_fmc) and deletes the rows of active members not listed. When the child is linked to this family the mirror rewrites its legacy values and the response carries a warning. 404 for an unknown or trashed family or an unknown child.",
         params: FamilyChildParams,
         body: SetChildRightsBody,
-        response: {
-          200: Type.Object({ rights: Type.Array(Type.Ref('ChildRight')) }),
-          ...errorResponses(...WRITE_ERRORS),
-        },
+        response: { 200: Type.Ref('ChildRightsResult'), ...errorResponses(...WRITE_ERRORS) },
       },
       preHandler: async (request) => checkRights(request.body.rights),
     },
-    notImplemented('setChildRights'),
+    async (request) =>
+      setChildRights(db, request.staff!, request.params.id, request.params.childId, request.body.rights),
   );
 
   app.get(
@@ -176,13 +179,15 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
       schema: {
         operationId: 'previewChildLink',
         tags: [FAMILY_TAG],
-        summary: 'The 28 mirrored legacy values now and after linking the child to this family',
+        summary: 'The 29 legacy parent values now and after linking the child to this family, with warnings',
+        description:
+          '28 columns are mirrored; home_send_notification is not and shows after_link = current. 409 when the mirror refuses a value (for example one too long for its legacy column).',
         security,
         params: FamilyChildParams,
-        response: { 200: Type.Ref('LinkPreview'), ...errorResponses(...READ_ERRORS) },
+        response: { 200: Type.Ref('LinkPreview'), ...errorResponses(...READ_ERRORS, 409) },
       },
     },
-    notImplemented('previewChildLink'),
+    async (request) => previewLink(db, request.params.id, request.params.childId),
   );
 
   app.post(
@@ -192,11 +197,14 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
         operationId: 'linkChild',
         tags: [FAMILY_TAG],
         summary: 'Link the child (sets children.family_id; the mirror then owns its parent columns)',
+        description:
+          'Returns the preview read after linking: every column shows changed false. 409 when the child is already linked to this family, is linked to another family without force=move, has no rights row of an active member of this family, or the mirror refuses a value.',
         security,
         params: FamilyChildParams,
-        response: { 200: Type.Ref('LinkResult'), ...errorResponses(...WRITE_ERRORS) },
+        querystring: LinkChildQuery,
+        response: { 200: Type.Ref('LinkPreview'), ...errorResponses(...WRITE_ERRORS) },
       },
     },
-    notImplemented('linkChild'),
+    async (request) => linkChild(db, request.staff!, request.params.id, request.params.childId, request.query.force),
   );
 }

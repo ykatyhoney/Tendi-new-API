@@ -25,6 +25,59 @@ export const MIRRORED_CAI_COLUMNS = (['father', 'mother'] as const).flatMap((par
   ),
 );
 
+/**
+ * The 29 legacy parent columns of PLAN.md "Legacy column mapping", in preview order: the 28
+ * mirrored ones plus home_send_notification, which is not mirrored (it keeps its value on link).
+ */
+export const PREVIEW_COLUMNS = [
+  ...MIRRORED_CHILDREN_COLUMNS.map((name) => ({ name, table: 'children' as const, mirrored: true })),
+  { name: 'home_send_notification', table: 'children' as const, mirrored: false },
+  ...MIRRORED_CAI_COLUMNS.map((name) => ({ name, table: 'children_additional_information' as const, mirrored: true })),
+];
+
+const BIT_COLUMNS = new Set([
+  'use_father_phone_for_notification',
+  'use_mother_phone_for_notification',
+  'home_send_notification',
+]);
+
+export type LegacyValue = string | number | null;
+
+/** A bit(1) comes back as a Buffer; everything else as stored. */
+const legacyValue = (v: unknown): LegacyValue => (Buffer.isBuffer(v) ? v[0] : ((v as LegacyValue | undefined) ?? null));
+
+/** The 29 columns as stored (CAI columns NULL without a children_additional_information row), or null for no child. */
+export async function storedLegacyValues(db: Queryable, childId: number): Promise<Record<string, LegacyValue> | null> {
+  const columns = PREVIEW_COLUMNS.map(({ name, table }) => {
+    const column = `${table === 'children' ? 'c' : 'cai'}.${name}`;
+    return BIT_COLUMNS.has(name) ? `${column} + 0 AS ${name}` : column;
+  });
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT ${columns.join(', ')}
+       FROM children c
+       LEFT JOIN children_additional_information cai ON cai.child_id = c.id
+      WHERE c.id = ?`,
+    [childId],
+  );
+  if (!rows[0]) return null;
+  return Object.fromEntries(PREVIEW_COLUMNS.map(({ name }) => [name, legacyValue(rows[0][name])]));
+}
+
+/**
+ * What the mirror writes for the child when linked to `familyId` (sp_family_preview: the 28
+ * mirrored columns). It SIGNALs (errno 1644) when the child or the active family does not exist,
+ * or when a family value is too long for its legacy column.
+ */
+export async function mirroredLegacyValues(
+  db: Queryable,
+  childId: number,
+  familyId: number,
+): Promise<Record<string, LegacyValue>> {
+  const [result] = await db.query<RowDataPacket[][]>('CALL sp_family_preview(?, ?)', [childId, familyId]);
+  const row = result[0][0];
+  return Object.fromEntries(Object.entries(row).map(([name, v]) => [name, legacyValue(v)]));
+}
+
 /** The 28 mirrored values of each child, as one comparable string per child id. */
 export async function legacySnapshot(db: Queryable, childIds: number[]): Promise<Map<number, string>> {
   if (childIds.length === 0) return new Map();
