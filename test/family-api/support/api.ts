@@ -7,7 +7,7 @@
 // @family_mirror cleared, rolled back on error), and its reads use the same connection, so a test
 // sees its own uncommitted rows and leaves nothing behind.
 //
-// Committed once per file, by the database root account, and removed in after(): a bearer token
+// Committed once per file, by the test-only root account (support/root.ts), and removed in after(): a bearer token
 // for an office, an admin and a teacher (403) account. family_api cannot write admin_api_tokens.
 //
 // Rolling back is not possible where a second account must write while the API's changes are
@@ -22,7 +22,8 @@ import { buildApp, type App } from '../../../src/app.ts';
 import { loadConfig } from '../../../src/config.ts';
 import { loadFamilyConfig } from '../../../src/modules/family/config.ts';
 import type { FamilyDb } from '../../../src/modules/family/db.ts';
-import { connectLocal, loadEnv, requireEnv } from '../../../scripts/family/lib/db.ts';
+import { connectLocal } from '../../../scripts/family/lib/db.ts';
+import { connectTestRoot, testDatabase } from './root.ts';
 
 export type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 export type Staff = 'office' | 'admin' | 'teacher';
@@ -85,10 +86,8 @@ export function useApi(): Api {
   const adminIds = {} as Record<Staff, number>;
 
   before(async () => {
-    loadEnv();
-    const database = requireEnv('DB_TEST_NAME');
-    if (database === process.env.DB_NAME) throw new Error('DB_TEST_NAME must differ from DB_NAME');
-    root = await connectLocal(database);
+    const database = testDatabase();
+    root = await connectTestRoot();
     for (const type of ['office', 'admin', 'teacher'] as const) {
       const [[row]] = await root.query<RowDataPacket[]>(
         "SELECT id FROM admin WHERE type = ? AND status = 'active' ORDER BY id LIMIT 1",
