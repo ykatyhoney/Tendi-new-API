@@ -2,38 +2,39 @@
 
 Fastify backend for Tendi. It owns the family database objects (migrations, procedures, triggers), the backfill scripts and the Family API. Tendi-new (Next.js) reaches data only through this API over HTTP.
 
-**State as of 2026-10-19 (after step 2.1): no Fastify application code exists yet; the database layer of the family module does.** The app is built from scratch in **Step 0.3**. Each bullet below gives either the decision taken or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. A decided item that has not been built yet is marked "decided, not set up yet". Update this file in the same pull request that sets each item up.
+**State as of 2026-10-19 (Step 0.3):** the Fastify app skeleton exists (`src/`): config, database pool, transactions, error format, CORS, OpenAPI, Redis client and `GET /health`. The family database layer (Steps 1.1–2.2, Phase 4 reconciliation) is in `migrations/family/` and `scripts/family/`. The Family API routes are not built yet. Each bullet below gives the decision taken, what exists, or "not set up yet", plus what the family spec (`../docs/family-module/PLAN.md`, `SCHEMA.md`) requires where it says something. Update this file in the same pull request that sets each item up.
 
-**Steps 1.1–2.1 were done before Step 0.3**, and were first committed together on `family/2.1-backfill`. They added:
-- `package.json` (database scripts, the test scripts and `mysql2`), `.env.example`, `.gitignore` and `.gitattributes`;
-- the shell scripts and TypeScript helpers in `scripts/family/`, and the migrations in `migrations/family/`;
-- the tests in `test/`.
-
-Step 0.3 extends these files instead of replacing them.
+**Steps 1.1–2.2 were done before Step 0.3**, on `family/2.1-backfill` and `family/2.2-proof-run`. Step 0.3 (`family/0.3-app-scaffold`) added the app around them and left their scripts, migrations and tests as they were.
 
 ## Project basics
 
-- **Node version:** decided: Node 24, with `.nvmrc` containing `24.12.0`. Not set up yet. The dev machine has Node v24.12.0 (nvm for Windows) and npm 11.6.2.
-- **npm scripts:** `package.json` has the database scripts (see "Local development") and `test:family-db` (see "Tests and CI"). Dev and build scripts come in Step 0.3. npm runs the `.sh` scripts with `bash`, which must resolve to Git Bash (`C:\Program Files\Git\usr\bin\bash.exe`), not WSL.
+- **Node version:** Node 24: `.nvmrc` contains `24.12.0` and `package.json` has `"engines": { "node": ">=24" }`. The dev machine has Node v24.12.0 (nvm for Windows) and npm 11.6.2.
+- **npm scripts:** `dev` (`node --watch src/server.ts`), `build` (`tsc -p tsconfig.build.json` into `dist/`), `start` (`node dist/server.js`), `test` (fast tests, see "Tests and CI"), `typecheck`, `lint`, `format`, `format:check`, `migrate` (alias of `db:family:migrate`) and `export:openapi`, plus the family database scripts (see "Local development"). npm runs the `.sh` scripts with `bash`, which must resolve to Git Bash (`C:\Program Files\Git\usr\bin\bash.exe`), not WSL.
 - **Module format:** `"type": "module"` (ESM), with `"engines": { "node": ">=24" }`.
-- **Local port:** decided: **4000**. Not set up yet.
-- **Git:** its own repository, remote `https://github.com/ykatyhoney/Tendi-new-API.git`, branch `main` with no commits. `origin/main` does not exist on the remote (`[gone]`). The workspace root (`Tendi/`) is **not** a git repository, so `../docs/family-module/` is not under version control.
+- **Local port:** **4000** (`PORT`, default 4000), listening on `HOST` (default `127.0.0.1`).
+- **Git:** its own repository, remote `https://github.com/ykatyhoney/Tendi-new-API.git`. One branch per step: `family/2.1-backfill`, `family/2.2-proof-run`, `family/0.3-app-scaffold`. Nothing has been pushed. The workspace root (`Tendi/`) is **not** a git repository, so `../docs/family-module/` is not under version control.
 - **Docker:** decided: none. No Docker and no Dockerfile.
 
 ## Fastify and code layout
 
-- **Fastify version:** not set up yet.
-- **TypeScript or JavaScript:** decided: **TypeScript**. Not set up yet.
-- **Plugin/module registration:** not set up yet.
-- **Where routes live:** not set up yet. The spec's Family API covers `/families`, `/people/:id` and related routes (PLAN.md "Family API").
-- **Naming conventions:** not set up yet.
+- **Fastify version:** **Fastify 5** (`fastify` 5.12.7), with `@fastify/type-provider-typebox` so route handlers get their types from the TypeBox schemas.
+- **TypeScript or JavaScript:** **TypeScript 6.0** (`typescript` 6.0.3; 7.0 is not yet supported by typescript-eslint). Node 24 runs the `.ts` files directly (type stripping): only erasable syntax (`erasableSyntaxOnly`), imports name the `.ts` file, type-only imports use `import type`. `npm run typecheck` checks `src/`, `scripts/` and `test/`. `npm run build` compiles `src/` to `dist/` and rewrites the import extensions.
+- **Plugin/module registration:**
+  - `src/app.ts` exports `buildApp(config?)`, which builds the app without listening, so tests use `app.inject()`. `src/server.ts` builds the app and listens.
+  - Shared resources are decorations on the root instance: `app.config`, `app.db` (the pool) and `app.redis` (client or `null`). They are typed in `src/app.ts` and closed in an `onClose` hook.
+  - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`. The first one is `src/modules/health/`.
+- **Where routes live:** in their module's folder under `src/modules/`. There is no global prefix: `GET /health`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`). The family module comes in Step 3.x.
+- **Naming conventions:**
+  - Folders and files are kebab-case; a module's entry is `index.ts`.
+  - Functions and variables are camelCase. TypeBox schemas are PascalCase, named after what they describe (`ErrorResponse`, `Health`).
+  - A schema shared across routes gets a `$id`, which becomes its name in the OpenAPI document. Env variables are UPPER_SNAKE_CASE.
 
 ## Database access
 
-- **Driver or ORM:** **`mysql2`, no ORM** (no Knex, Prisma or Drizzle). Installed (`^3.24.6`, the only dependency so far) and used by the database tests; the app's pool is not set up yet.
-- **Where the pool is created:** not set up yet.
-- **Transactions:** not set up yet. The spec requires every family write to run in one transaction and to write a row to `audit_logs`.
-- **Migrations:** **this repo's own migration runner**, `scripts/family/migrate.sh` (bash plus the `mysql` CLI, so `DELIMITER` works for trigger and procedure migrations). It writes rows compatible with the tenant database's existing `schema_migrations` table. The tool that wrote the existing 131 rows (`applied_by` = `provision` / `clone-tenant-to-beta`) belongs to the PHP app and is not in this workspace.
+- **Driver or ORM:** **`mysql2`, no ORM** (no Knex, Prisma or Drizzle).
+- **Where the pool is created:** `src/db/pool.ts` (`mysql2/promise` `createPool`, `DB_POOL_SIZE` connections, `utf8mb4_general_ci`, `dateStrings`). `buildApp` creates one pool, exposes it as `app.db` and ends it on close. For now it connects with the `DB_*` credentials; the dedicated `family_api` user comes with the Family API.
+- **Transactions:** `withTransaction(pool, work, { auditUser })` in `src/db/transaction.ts`. Every write route uses it. It runs `work(connection)` in one transaction, commits only if `work` completes, and rolls back otherwise. It sets `@audit_user` (the ra_* audit triggers record it) and clears `@audit_user` / `@family_mirror` before the connection goes back to the pool. The spec also requires every family write to add an `audit_logs` row; the Family API does that inside the same transaction.
+- **Migrations:** **this repo's own migration runner**, `scripts/family/migrate.sh` (bash plus the `mysql` CLI, so `DELIMITER` works for trigger and procedure migrations), run with `npm run migrate` (or `db:family:migrate`). The SQL files are in `migrations/family/`, applied in order. It writes rows compatible with the tenant database's existing `schema_migrations` table; its columns were checked in step 1.2. The tool that wrote the existing 131 rows (`applied_by` = `provision` / `clone-tenant-to-beta`) belongs to the PHP app and is not in this workspace.
   - Files are `migrations/family/family_NNN_<name>.sql`, each with a required `family_NNN_<name>.down.sql`. Each file holds **one DDL statement**, because MariaDB commits DDL implicitly; a failure then leaves nothing half-applied.
   - Each row records: `version` = `family_NNN`, `filename` = the up file, `checksum` = SHA-1 of the up file, `batch` = `MAX(batch) + 1` per run, and `applied_by` = `family-migrate`.
   - A failed up is recorded as `status = 'failed'` with `error_message` and retried on the next run. A down deletes its row, because the status enum has no "reverted" value.
@@ -82,9 +83,9 @@ Step 0.3 extends these files instead of replacing them.
 
 ## Validation and OpenAPI
 
-- **Validation library:** decided: **TypeBox**. Not set up yet.
-- **How schemas attach to routes:** decided: TypeBox schemas go on each route's `schema` option, so the same definitions validate requests and produce the OpenAPI document. Not set up yet.
-- **@fastify/swagger / OpenAPI:** decided: `@fastify/swagger` built from the TypeBox route schemas, exported to **`openapi/family.json`** in this repo (Step 3.3). Tendi-new generates its types from that file. The served JSON URL is not set up yet.
+- **Validation library:** **TypeBox** (`typebox` 1.x, the current package; `@sinclair/typebox` is its 0.x predecessor). Fastify validates requests with its built-in Ajv against the TypeBox schemas. The env config is validated with TypeBox `Value` (`src/config.ts`).
+- **How schemas attach to routes:** TypeBox schemas go on each route's `schema` option (`params`, `querystring`, `body`, `response`, plus `tags` and `summary`), so the same definitions validate requests, type the handler, and produce the OpenAPI document. Shared schemas are added with `app.addSchema` and need a `$id`.
+- **@fastify/swagger / OpenAPI:** `@fastify/swagger` 9 builds an OpenAPI 3.0.3 document from the route schemas. The running app serves it at **`GET /openapi.json`** (`http://localhost:4000/openapi.json`). `npm run export:openapi` writes it to **`openapi/family.json`** (committed), which Tendi-new generates its types from. Today it holds `/health` and `ErrorResponse`; Step 3.3 adds the family routes.
 
 ## Auth and roles
 
@@ -93,21 +94,28 @@ Step 0.3 extends these files instead of replacing them.
 
 ## CORS
 
-- **Setup and allowed origins:** not set up yet. The allowed local origin will be Tendi-new at `http://localhost:3000`.
+- **Setup and allowed origins:** `@fastify/cors`, allowing the origins in `CORS_ORIGIN` (comma-separated; locally `http://localhost:3000`, Tendi-new) with credentials. Other origins get no CORS headers.
 
 ## Logging, errors, config, jobs, alerting
 
-- **Logging:** not set up for the app yet. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
-- **Error response format:** not set up yet.
-- **Config/env loading:** `.env` (git-ignored) holds local values. `.env.example` (committed) lists the keys: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, plus `MARIADB_BIN_DIR` (optional). The `scripts/family/*.sh` scripts read `.env` themselves, and values already set in the environment take precedence. The app's config module is not set up yet.
+- **Logging:** Fastify's built-in logger (pino, JSON lines on stdout) at `LOG_LEVEL` (default `info`); request logging is on. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
+- **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler and validation errors (400). For 5xx the message is the generic "Internal Server Error" and the details go to the log only. The schema is registered as `ErrorResponse` for routes' `response` sections.
+- **Config/env loading:** `src/config.ts` (`loadConfig`) reads `.env` (git-ignored); variables already set in the environment win. It validates the values with TypeBox at startup, and stops with `invalid configuration (see .env.example): …` if one is missing or wrong.
+  - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty values count as unset.
+  - `.env.example` (committed) also lists the script-only keys `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, `MARIADB_BIN_DIR` and `FAMILY_DB_PERF_TARGET_MS`. The `scripts/family/*.sh` scripts and `scripts/family/lib/db.ts` keep their own `.env` readers.
 - **Scheduled jobs/cron:** chosen 2026-10-19: the **OS scheduler runs the CLI**, with no in-process scheduler and no new library. The nightly reconciliation is `npm run family:reconcile`. On Windows it is registered by `scripts/family/schedule-reconcile.ps1` (user task "Tendi family reconcile", 02:30, log in `var/family-reconcile/`); on Linux, cron (`docs/family/reconcile-runbook.md`). Single run: a MariaDB `GET_LOCK('<db>:family:reconcile')`, plus a per-night check in `family_reconcile_runs`. It switches to the Redis lock (`SET <prefix>:family:reconcile NX EX 3600`) in Step 2.3. The jobs may move into the app's scheduler after Step 0.3.
 - **Alerting/email:** not set up yet. Chosen 2026-10-19 for the reconciliation: a `WARNING` on stderr and exit code 2, which the scheduler records as a failed run. `scripts/family/reconcile/alert.ts` is the single hook to wire once an alerting channel is chosen. The PHP `notifications_queue` is the parents' SMS/voice/email queue and must not be used for staff alerts.
 
 ## Tests and CI
 
 - **Test runner:** **`node:test`** (Node 24's built-in runner, chosen 2026-10-19; no test library).
-  - Tests are TypeScript, run directly by Node's type stripping. Imports name the `.ts` extension, and type-only imports use `import type`.
-  - There is no type-checking yet; `typescript` and `tsconfig.json` arrive in Step 0.3.
+  - Tests are TypeScript, run directly by Node's type stripping. They are type-checked by `npm run typecheck`.
+  - `npm test` runs the fast tests: `test/app/` (the app through `app.inject()`; `/health` needs the local MariaDB from `.env`), `test/family-backfill/` and `test/family-proof/`.
+  - `npm run test:family-db` runs the database suite (see below).
+- **Lint and format:**
+  - **ESLint 10** (`eslint.config.js`: `@eslint/js` recommended plus `typescript-eslint` recommended); `npm run lint` covers the whole repo.
+  - **Prettier 3** (`.prettierrc.json`: single quotes, width 120, trailing commas); `npm run format` / `format:check`.
+  - `.prettierignore` leaves out `scripts/family/` and the `test/family-*` suites, which predate Prettier. Format them in a separate change before editing them.
 - **How tests hit a database:** the suites (Steps 1.6 and 3.8) use `tendi_family_test` (`DB_TEST_NAME`), never the development database.
   - `npm run test:family-db` first runs `db:family:test-reset`: restore the dump into the test database, then apply every family migration. It then runs `test/family-db/**/*.test.ts` with `--test-concurrency=1`.
   - Each file opens one connection (`test/family-db/support/db.ts`). Every test runs inside a transaction that is rolled back, with `@family_mirror` and `@audit_user` cleared first.
@@ -130,12 +138,12 @@ Step 0.3 extends these files instead of replacing them.
   - `npm run db:family:restore [-- <dump.sql>]`: drops and recreates `DB_NAME`, loads the dump, then checks for 209 base tables, 2 views, 753 `children` rows, 749 `children_additional_information` rows, 312 `ra_*` triggers on 104 tables (via `SHOW TRIGGERS`) and 0 routines. It exits non-zero on any mismatch.
   - `npm run db:family:test-clone`: rebuilds `DB_TEST_NAME` from `DB_NAME`, including any applied family migrations and their `schema_migrations` rows, and runs the same checks. The check of 209 tables counts the dump's tables only; the 7 family tables are reported separately.
   - Both scripts refuse a `DB_HOST` other than `localhost`, `127.0.0.1` or `::1`, a database name that does not start with `tendi_family_`, and a server whose `@@hostname` is not this machine (for example a tunnel). They warn when the server is not MariaDB 10.11.9. Credentials go to `mysql` through a temporary option file, never on the command line.
-- **npm scripts for dev, test and migrations:** not set up yet.
+- **npm scripts for dev, test and migrations:** `npm run dev` (watch mode on port 4000), `npm test`, `npm run migrate`. See "Project basics".
 
 ## Redis
 
-- **Client library:** not set up yet.
-- **Connection config:** not set up yet.
+- **Client library:** **`redis`** 6 (node-redis, the official client). `src/redis.ts` connects only when `REDIS_URL` is set; `app.redis` is the client or `null`, and `/health` reports `redis: ok | down | disabled`. Redis itself is used from Step 2.3.
+- **Connection config:** `REDIS_URL` (for example `redis://127.0.0.1:6379`); unset or empty means no Redis.
 - **Key naming:** not set up yet.
 - **What is cached:** nothing in this repo yet. The tenant database's `redis_caches_log` table only tracks `children_attendance`. The PHP team has not yet confirmed whether any child or parent data is cached in Redis (see Open questions).
 - **Invalidation:** not set up yet. The spec says to clear cached child and parent data after mirror writes. What to clear depends on the PHP team's answer.
@@ -143,9 +151,9 @@ Step 0.3 extends these files instead of replacing them.
 ## Conventions to follow
 
 - Use npm only (no yarn or pnpm). Do not use Docker or add a Dockerfile. MariaDB 10.11 and Redis run as local installs.
-- Use Node 24 (`.nvmrc` `24.12.0`), TypeScript, and port 4000.
+- Use Node 24 (`.nvmrc` `24.12.0`), TypeScript 6 (erasable syntax only), and port 4000. New code passes `npm run typecheck`, `npm run lint` and `npm run format:check`.
 - Use `mysql2` directly, with no ORM or query builder.
-- Use TypeBox for every route schema. The OpenAPI document comes from those schemas, exported to `openapi/family.json`.
+- Use TypeBox for every route schema. Errors use `{ statusCode, error, message }`. Each module is a plugin in `src/modules/<name>/`. The OpenAPI document comes from those schemas, exported to `openapi/family.json`.
 - Every migration goes through this repo's runner, with a version prefixed `family_` and a row in `schema_migrations`.
 - Do not share code with Tendi-new. The contract is `openapi/family.json`.
 - Read the spec from `../docs/family-module/` (single copy). Do not copy it into this repo.
@@ -153,7 +161,7 @@ Step 0.3 extends these files instead of replacing them.
 - Never run anything against production. Use the local database restored from the 2026-09-24 dump.
 - Set `children.family_id` (link, unlink, demos, fixtures, tests) only in `tendi_family_test`, never in `tendi_family_dev` (CLAUDE.md rule 7). The mirror would overwrite the dev legacy values that the backfill and the proof run read.
 - Never change or drop an existing column the PHP app reads. Only the database mirror writes the 28 mirrored legacy parent columns (`home_send_notification` stays form-owned).
-- Every family write runs in one transaction and writes an `audit_logs` row.
+- Every family write runs in one transaction through `withTransaction` (with `auditUser`) and writes an `audit_logs` row.
 - Only `admin`, `superadmin` and `office` staff may use the Family API.
 - When a step sets up or changes a convention, update this file in the same pull request.
 
