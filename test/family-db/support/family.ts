@@ -6,10 +6,11 @@ import { normalizePhone } from '../../../scripts/family/lib/phone.ts';
 import { rows, value } from './db.ts';
 import type { Db } from './db.ts';
 
+/** The 10 mirrored children columns (home_send_notification is not mirrored; it stays as stored). */
 export const CHILDREN_COLUMNS = [
   'father_name', 'mother_name', 'father_phone', 'mother_phone', 'home_phone', 'parent_email',
   'use_father_phone_for_notification', 'use_mother_phone_for_notification',
-  'notification_father_phone_method', 'notification_mother_phone_method', 'home_send_notification',
+  'notification_father_phone_method', 'notification_mother_phone_method',
 ] as const;
 
 export const CAI_COLUMNS = ['father', 'mother'].flatMap((slot) =>
@@ -19,7 +20,7 @@ export const CAI_COLUMNS = ['father', 'mother'].flatMap((slot) =>
 
 export const LEGACY_COLUMNS = [...CHILDREN_COLUMNS, ...CAI_COLUMNS];
 
-const BIT_COLUMNS = new Set(['use_father_phone_for_notification', 'use_mother_phone_for_notification', 'home_send_notification']);
+const BIT_COLUMNS = new Set(['use_father_phone_for_notification', 'use_mother_phone_for_notification']);
 
 export type Legacy = Record<string, string | number | null>;
 
@@ -33,7 +34,16 @@ function normalize(row: RowDataPacket): Legacy {
   return out;
 }
 
-/** The 29 values as stored (children LEFT JOIN children_additional_information). */
+/**
+ * How an empty value of each CAI column looks for this child after mirroring: NULL where the
+ * stored value is NULL, '' otherwise (sp_family_mirror_values keeps the legacy representation).
+ */
+export async function emptyAs(db: Db, childId: number): Promise<Record<string, null | ''>> {
+  const [row] = await rows(db, `SELECT ${CAI_COLUMNS.join(', ')} FROM children_additional_information WHERE child_id = ?`, [childId]);
+  return Object.fromEntries(CAI_COLUMNS.map((c) => [c, row && row[c] === null ? null : '']));
+}
+
+/** The 28 mirrored values as stored (children LEFT JOIN children_additional_information). */
 export async function storedLegacy(db: Db, childId: number): Promise<Legacy> {
   const [row] = await rows(db, `
     SELECT ${CHILDREN_COLUMNS.map((c) => `c.${c}`).join(', ')}, ${CAI_COLUMNS.map((c) => `cai.${c}`).join(', ')}
@@ -42,7 +52,7 @@ export async function storedLegacy(db: Db, childId: number): Promise<Legacy> {
   return normalize(row);
 }
 
-/** The 29 values sp_family_preview derives, without writing anything. */
+/** The 28 values sp_family_preview derives, without writing anything. */
 export async function preview(db: Db, childId: number, familyId: number | null = null): Promise<Legacy> {
   const [result] = await db.query<RowDataPacket[][]>('CALL sp_family_preview(?, ?)', [childId, familyId]);
   return normalize(result[0][0]);
@@ -73,7 +83,9 @@ export function createFamily(db: Db, { name = 'Test family', householdPhone = ''
 }
 
 export interface PersonInput {
-  fname: string; lname: string; legacyFullName?: string; email?: string;
+  /** Defaults to "fname lname", as the API sets it for people it creates; pass '' for an empty legacy name. */
+  legacyFullName?: string;
+  fname: string; lname: string; email?: string;
   occupation?: string; employer?: string; status?: 'active' | 'trash';
 }
 
@@ -81,7 +93,7 @@ export function createPerson(db: Db, p: PersonInput) {
   return insert(db, `INSERT INTO people (fname, lname, legacy_full_name, email, occupation, employer, status,
                                          created_at, updated_at, created_by, updated_by)
                      VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), 0, 0)`,
-  [p.fname, p.lname, p.legacyFullName ?? '', p.email ?? '', p.occupation ?? '', p.employer ?? '', p.status ?? 'active']);
+  [p.fname, p.lname, p.legacyFullName ?? `${p.fname} ${p.lname}`, p.email ?? '', p.occupation ?? '', p.employer ?? '', p.status ?? 'active']);
 }
 
 export function addPhone(db: Db, personId: number,

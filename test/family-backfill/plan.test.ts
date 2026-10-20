@@ -105,6 +105,13 @@ describe('planBackfill', () => {
     assert.deepEqual(p.addresses, [{ kind: 'home', line1: '8 Rena Lane' }, { kind: 'work', line1: '1 Main St' }]);
   });
 
+  test('an empty legacy name is stored as empty, not built from fname/lname', () => {
+    const plan = planBackfill([child(1, { father_name: '' }, { father_fname: 'Berl', father_lname: 'Berlin' })]);
+    const [p] = plan.households[0].people;
+    assert.equal(p.legacyFullName, '');
+    assert.deepEqual([p.fname, p.lname], ['Berl', 'Berlin']);
+  });
+
   test('rights copy the notification columns; the parent whose email is parent_email pays and is primary', () => {
     const plan = planBackfill([child(1, {
       father_name: 'F', mother_name: 'M', parent_email: 'M@example.test',

@@ -43,6 +43,7 @@ Step 0.3 extends these files instead of replacing them.
   - `family_010` to `family_012` add the read-only procedures `sp_family_parent_values`, `sp_family_mirror_values` and `sp_family_preview`.
   - `family_013` to `family_015` add the writing procedures `sp_family_mirror` (`SQL SECURITY DEFINER`), `sp_family_mirror_family` and `sp_family_mirror_person`.
   - `family_016` adds the 14 after-write `trg_*` triggers on the six family tables. It is the one exception to "one DDL statement per file": it uses `CREATE OR REPLACE TRIGGER` in up and `DROP TRIGGER IF EXISTS` in down, so a partly applied run can be re-run.
+  - `family_022` (step 2.2) re-creates six objects so the mirror fills the legacy columns exactly as today: 28 mirrored columns (no `home_send_notification`), `*_name` = `legacy_full_name` verbatim, 0/`'voice'` without a rights row, and empty CAI values keeping a stored NULL. Its down step restores the 010–018 definitions. Committed migrations are never edited; changes go in a new migration.
   - `family_017` adds `sp_family_mirror_cai`. `family_018` adds the link and lock triggers `trg_children_family_bu`, `trg_children_family_au` (`PRECEDES ra_children_au`) and `trg_cai_family_bu`, grouped like `family_016`. For a linked child, a legacy write to a mirrored column is put back and logged in `family_mirror_lock_log`, with `db_user = USER()`. Other columns save normally.
   - **Mirror and audit:**
     - The `ra_*` audit triggers record mirror writes with `user_id = COALESCE(@audit_user, updated_by, created_by, 0)`. The Family API must `SET @audit_user = <admin.id>` on its connection before each write, or mirror changes are attributed to the child's last editor.
@@ -57,6 +58,15 @@ Step 0.3 extends these files instead of replacing them.
   - It builds draft families from the legacy columns, in one transaction. It writes the 6 family tables plus the bookkeeping tables `family_backfill_runs`, `_rows` and `_child_map` (migrations `family_019` to `family_021`), and never sets `children.family_id`.
   - Planning is a pure function, `scripts/family/backfill/plan.ts`, unit-tested by `npm run test:family-backfill`.
   - Review CSVs go to `var/family-backfill/review-run-<id>.csv`. `var/` is git-ignored because the CSVs hold personal data.
+- **Proof run (step 2.2):** `npm run family:proof-run -- [--run <id>] [--database <name>]` runs `scripts/family/proof-run.ts`.
+  - For every child in a backfill run's `family_backfill_child_map`, it compares `sp_family_preview(child, draft family)` with the 28 stored mirrored values (`home_send_notification` is not mirrored). Phones are compared as typed and normalized; strings exactly and after trim/case-fold; bit and enum columns by value.
+  - It is read-only: a `READ ONLY` transaction, with `CHECKSUM TABLE` compared before and after.
+  - It writes `docs/family/family-sync-proof.md` with counts and child ids only, no personal data (CLAUDE.md rule 6), and the full diff with names and values as `var/family-proof/family-sync-proof-run-<id>.csv`. Accepted causes are `ALLOWED_CAUSES` in `compare.ts`: missing CAI row (D4), `parent_email` matches neither parent, parent shared with siblings, shared phone. Any other cause is a failure, and the command exits 1.
+  - The comparison and cause rules are in `scripts/family/proof/compare.ts`, tested by `npm run test:family-proof`.
+- **Reconciliation (Phase 4 pilot):** `npm run family:reconcile [-- --once] [-- --database <name>]` runs `scripts/family/reconcile.ts`.
+  - It compares every linked child's 28 mirrored columns with `sp_family_preview(child, NULL)` and counts lock-log rows from the last 24 hours. It writes one `family_reconcile_runs` row (migration `family_023`) and never fixes data.
+  - Exit codes: 0 no drift or skipped, 2 drift, 1 error.
+  - The core is in `scripts/family/reconcile/run.ts`, tested in `test/family-db/reconcile.test.ts`. The runbook is `docs/family/reconcile-runbook.md`.
 - **Shared TypeScript helpers:** `scripts/family/lib/`.
   - `db.ts` provides the local-only mysql2 connection and `.env` loading; the tests use it as well.
   - `phone.ts` provides `normalizePhone`: digits only, last 10, `''` below 10 digits. No normalizer existed in this repository; the rule comes from `parent_sms_messages`, where the PHP app matched `718-555-0199` and `7185550199` to `7185550199`.
@@ -87,11 +97,11 @@ Step 0.3 extends these files instead of replacing them.
 
 ## Logging, errors, config, jobs, alerting
 
-- **Logging:** not set up yet.
+- **Logging:** not set up for the app yet. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
 - **Error response format:** not set up yet.
 - **Config/env loading:** `.env` (git-ignored) holds local values. `.env.example` (committed) lists the keys: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, plus `MARIADB_BIN_DIR` (optional). The `scripts/family/*.sh` scripts read `.env` themselves, and values already set in the environment take precedence. The app's config module is not set up yet.
-- **Scheduled jobs/cron:** not set up yet. The spec needs a nightly reconciliation job during the pilot, with a Redis lock so only one instance runs it.
-- **Alerting/email:** not set up yet.
+- **Scheduled jobs/cron:** chosen 2026-10-19: the **OS scheduler runs the CLI**, with no in-process scheduler and no new library. The nightly reconciliation is `npm run family:reconcile`. On Windows it is registered by `scripts/family/schedule-reconcile.ps1` (user task "Tendi family reconcile", 02:30, log in `var/family-reconcile/`); on Linux, cron (`docs/family/reconcile-runbook.md`). Single run: a MariaDB `GET_LOCK('<db>:family:reconcile')`, plus a per-night check in `family_reconcile_runs`. It switches to the Redis lock (`SET <prefix>:family:reconcile NX EX 3600`) in Step 2.3. The jobs may move into the app's scheduler after Step 0.3.
+- **Alerting/email:** not set up yet. Chosen 2026-10-19 for the reconciliation: a `WARNING` on stderr and exit code 2, which the scheduler records as a failed run. `scripts/family/reconcile/alert.ts` is the single hook to wire once an alerting channel is chosen. The PHP `notifications_queue` is the parents' SMS/voice/email queue and must not be used for staff alerts.
 
 ## Tests and CI
 
@@ -142,7 +152,7 @@ Step 0.3 extends these files instead of replacing them.
 - One step = one branch `family/<step>-<slug>` = one pull request.
 - Never run anything against production. Use the local database restored from the 2026-09-24 dump.
 - Set `children.family_id` (link, unlink, demos, fixtures, tests) only in `tendi_family_test`, never in `tendi_family_dev` (CLAUDE.md rule 7). The mirror would overwrite the dev legacy values that the backfill and the proof run read.
-- Never change or drop an existing column the PHP app reads. Only the database mirror writes the 29 legacy parent columns.
+- Never change or drop an existing column the PHP app reads. Only the database mirror writes the 28 mirrored legacy parent columns (`home_send_notification` stays form-owned).
 - Every family write runs in one transaction and writes an `audit_logs` row.
 - Only `admin`, `superadmin` and `office` staff may use the Family API.
 - When a step sets up or changes a convention, update this file in the same pull request.

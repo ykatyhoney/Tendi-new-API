@@ -17,7 +17,7 @@ async function linkedChild() {
 }
 
 describe('lock', () => {
-  test('linking mirrors all 29 columns and logs nothing', async () => {
+  test('linking mirrors all 28 columns and logs nothing', async () => {
     const { child } = await linkedChild();
     assert.deepEqual(await storedLegacy(db(), child), await preview(db(), child));
     assert.equal(await lockLogCount(db(), child), 0);
@@ -68,6 +68,18 @@ describe('lock', () => {
     assert.equal(row.comments, 'legacy comment');
     const [log] = await rows(db(), 'SELECT table_name, col_name, attempted_value FROM family_mirror_lock_log WHERE child_id = ?', [child]);
     assert.deepEqual({ ...log }, { table_name: 'children_additional_information', col_name: 'father_email', attempted_value: 'legacy@example.test' });
+  });
+
+  test('home_send_notification is not mirrored or locked: linking keeps it, a legacy edit saves', async () => {
+    const [child] = await pickChildren(db(), 1);
+    await db().query("UPDATE children SET home_send_notification = b'1' WHERE id = ?", [child]);
+    const family = await createParents(db(), [child]);
+    await link(db(), child, family.familyId);
+    assert.equal(await value(db(), 'SELECT home_send_notification + 0 FROM children WHERE id = ?', [child]), 1, 'linking keeps the stored value');
+
+    await db().query("UPDATE children SET home_send_notification = b'0' WHERE id = ?", [child]);
+    assert.equal(await value(db(), 'SELECT home_send_notification + 0 FROM children WHERE id = ?', [child]), 0);
+    assert.equal(await lockLogCount(db(), child), 0);
   });
 
   test('same UPDATE on an unlinked child saves both fields and logs nothing', async () => {

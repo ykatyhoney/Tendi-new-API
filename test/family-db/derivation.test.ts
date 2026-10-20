@@ -5,13 +5,13 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { useTestDatabase, value } from './support/db.ts';
 import {
-  addAddress, addMember, addPhone, createFamily, createPerson, link, pickChildren, preview, setRights, storedLegacy,
+  addAddress, addMember, addPhone, createFamily, createPerson, emptyAs, link, pickChildren, preview, setRights, storedLegacy,
 } from './support/family.ts';
 
 const db = useTestDatabase();
 
 describe('derivation', () => {
-  test('both parents: all 29 values', async () => {
+  test('both parents: all 28 values', async () => {
     const [child] = await pickChildren(db(), 1);
     const familyId = await createFamily(db(), { householdPhone: '718-555-0101' });
     const father = await createPerson(db(), {
@@ -29,7 +29,7 @@ describe('derivation', () => {
     const mm = await addMember(db(), familyId, mother, { relationship: 'mother', sortOrder: 1 });
     await setRights(db(), fm, child, { receivesNotifications: true, notifyMethod: 'sms' });
     await setRights(db(), mm, child, { notifyMethod: 'voice', isPaymentResponsible: true });
-    const storedHomeSend = await value<Buffer>(db(), 'SELECT home_send_notification FROM children WHERE id = ?', [child]);
+    const empty = await emptyAs(db(), child);
 
     assert.deepEqual(await preview(db(), child, familyId), {
       father_name: 'Avi Testman',
@@ -42,7 +42,6 @@ describe('derivation', () => {
       use_mother_phone_for_notification: 0,
       notification_father_phone_method: 'sms',
       notification_mother_phone_method: 'voice',
-      home_send_notification: storedHomeSend[0], // TODO(step 2.2): kept as stored until the rule is confirmed
       father_fname: 'Avraham',
       father_lname: 'Testman',
       father_home_phone: '718-555-0112',
@@ -56,12 +55,51 @@ describe('derivation', () => {
       mother_lname: 'Testman',
       mother_home_phone: '718-555-0101', // no phone labelled home: falls back to the household phone
       mother_email: 'sara@example.test',
-      mother_address: '',
-      mother_occupation: '',
-      mother_employer: '',
-      mother_work_address: '',
-      mother_office_phone: '',
+      // Empty values keep the child's legacy representation (NULL in older rows, '' otherwise).
+      mother_address: empty.mother_address,
+      mother_occupation: empty.mother_occupation,
+      mother_employer: empty.mother_employer,
+      mother_work_address: empty.mother_work_address,
+      mother_office_phone: empty.mother_office_phone,
     });
+  });
+
+  test('an empty legacy name stays empty even when fname and lname are set', async () => {
+    const [child] = await pickChildren(db(), 1);
+    const familyId = await createFamily(db());
+    const father = await createPerson(db(), { fname: 'Berl', lname: 'Berlin', legacyFullName: '' });
+    await addMember(db(), familyId, father, { relationship: 'father' });
+    const v = await preview(db(), child, familyId);
+    assert.equal(v.father_name, '');
+    assert.deepEqual([v.father_fname, v.father_lname], ['Berl', 'Berlin']);
+  });
+
+  test('empty CAI values: NULL where the stored value is NULL, \'\' otherwise', async () => {
+    const [child] = await pickChildren(db(), 1);
+    const familyId = await createFamily(db());
+    const father = await createPerson(db(), { fname: 'Avi', lname: 'Test' });
+    await addMember(db(), familyId, father, { relationship: 'father' });
+
+    await db().query("UPDATE children_additional_information SET father_work_address = NULL, father_occupation = '' WHERE child_id = ?", [child]);
+    let v = await preview(db(), child, familyId);
+    assert.equal(v.father_work_address, null);
+    assert.equal(v.father_occupation, '');
+
+    await db().query("UPDATE children_additional_information SET father_work_address = '' WHERE child_id = ?", [child]);
+    v = await preview(db(), child, familyId);
+    assert.equal(v.father_work_address, '');
+
+    await db().query("UPDATE children_additional_information SET father_work_address = '1 Old St' WHERE child_id = ?", [child]);
+    v = await preview(db(), child, familyId);
+    assert.equal(v.father_work_address, '', 'a value the family no longer has becomes \'\' (what the PHP app writes today)');
+  });
+
+  test('home_send_notification is not mirrored: the preview has 28 columns without it', async () => {
+    const [child] = await pickChildren(db(), 1);
+    const familyId = await createFamily(db());
+    const v = await preview(db(), child, familyId);
+    assert.equal(Object.keys(v).length, 28);
+    assert.ok(!('home_send_notification' in v));
   });
 
   test('step-father only: fills the father slot; the mother slot stays empty', async () => {
@@ -82,10 +120,12 @@ describe('derivation', () => {
     assert.equal(v.father_fname, 'Moshe');
     assert.equal(v.mother_name, '');
     assert.equal(v.mother_phone, '');
-    assert.equal(v.use_mother_phone_for_notification, null);
-    assert.equal(v.notification_mother_phone_method, null);
-    assert.equal(v.mother_fname, '');
-    assert.equal(v.mother_home_phone, '');
+    // Empty slot: the legacy values for "no notifications", not NULL.
+    assert.equal(v.use_mother_phone_for_notification, 0);
+    assert.equal(v.notification_mother_phone_method, 'voice');
+    const empty = await emptyAs(db(), child);
+    assert.equal(v.mother_fname, empty.mother_fname);
+    assert.equal(v.mother_home_phone, empty.mother_home_phone);
     // Nobody is payment-responsible: the primary member's email.
     assert.equal(v.parent_email, 'rivka@example.test');
   });
@@ -114,8 +154,8 @@ describe('derivation', () => {
     assert.equal(v.father_name, 'Yossi Solo');
     assert.equal(v.mother_name, '');
     assert.equal(v.mother_phone, '');
-    assert.equal(v.mother_email, '');
-    assert.equal(v.use_mother_phone_for_notification, null);
+    assert.equal(v.mother_email, (await emptyAs(db(), child)).mother_email);
+    assert.equal(v.use_mother_phone_for_notification, 0);
     // The trashed mother's payment-responsible row is ignored: falls back to the primary member.
     assert.equal(v.parent_email, 'yossi@example.test');
   });
