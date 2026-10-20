@@ -60,7 +60,7 @@ describe('app', () => {
     const res = await app.inject({ method: 'GET', url: OPENAPI_JSON_PATH });
     assert.equal(res.statusCode, 200);
     const doc = res.json();
-    assert.equal(doc.openapi, '3.0.3');
+    assert.equal(doc.openapi, '3.1.0');
     assert.ok(doc.paths['/health'], 'routes appear in the document');
     assert.equal(doc.paths[OPENAPI_JSON_PATH], undefined, 'the document route itself is hidden');
   });

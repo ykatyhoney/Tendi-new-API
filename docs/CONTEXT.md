@@ -24,12 +24,13 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - Shared resources are decorations on the root instance: `app.config`, `app.db` (the pool) and `app.redis` (client or `null`). They are typed in `src/app.ts` and closed in an `onClose` hook.
   - Each module is a Fastify plugin in its own folder, `src/modules/<name>/index.ts` (default export `async function (app)`), registered in `buildApp`: `health` and `family`.
   - **Family module** (`src/modules/family/`): `config.ts` (its env), `db.ts` (its pool and `familyDb.transaction`), `routes/` (HTTP: schemas, status codes), `service/` (rules; every write goes through the transaction), `repository/` (SQL only, on a `Queryable` = pool or transaction connection).
-    - Public: `GET /health/family` (pings its pool). Every other route registers inside the module's **protected scope**, which runs the staff auth preHandler (see "Auth and roles"); today that is `GET /staff/me`. The Family API routes of PLAN.md are added there in the following steps.
+    - Public: `GET /health/family` (pings its pool). Every other route registers inside the module's **protected scope**, which runs the staff auth `onRequest` hook (see "Auth and roles"); today that is `GET /staff/me`. The Family API routes of PLAN.md are added there in the following steps.
     - It caches no family data (MVP).
 - **Where routes live:** in their module's folder under `src/modules/` (the family module: `src/modules/family/routes/`). There is no global API prefix: `GET /health`, `GET /health/family`, `GET /openapi.json`, and the Family API at the paths in PLAN.md (`/families`, `/people/:id`, `/children/:childId/unlink`).
 - **Naming conventions:**
   - Folders and files are kebab-case; a module's entry is `index.ts`.
-  - Functions and variables are camelCase. TypeBox schemas are PascalCase, named after what they describe (`ErrorResponse`, `Health`).
+  - Functions and variables are camelCase. TypeBox schemas are PascalCase, named after what they describe (`ErrorResponse`, `Family`).
+  - **API field names are the SCHEMA.md column names, in snake_case** (`household_phone`, `notify_method`, `collect_from`, `admin_id`). Path parameters follow PLAN.md (`:id`, `:memberId`, `:childId`). Booleans are the tinyint(1) flags.
   - A schema shared across routes gets a `$id`, which becomes its name in the OpenAPI document. Env variables are UPPER_SNAKE_CASE.
 
 ## Database access
@@ -79,7 +80,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - The core is in `scripts/family/reconcile/run.ts`, tested in `test/family-db/reconcile.test.ts`. The runbook is `docs/family/reconcile-runbook.md`.
 - **Shared TypeScript helpers:** `scripts/family/lib/`.
   - `db.ts` provides the local-only mysql2 connection and `.env` loading; the tests use it as well.
-  - `phone.ts` provides `normalizePhone`: digits only, last 10, `''` below 10 digits. No normalizer existed in this repository; the rule comes from `parent_sms_messages`, where the PHP app matched `718-555-0199` and `7185550199` to `7185550199`.
+  - `phone.ts` re-exports `normalizePhone` from **`src/lib/phone.ts`**, where it now lives so the Family API uses the same function (extension dropped, digits only, last 10, `''` below 10 digits). The rule comes from `parent_sms_messages`, where the PHP app matched `718-555-0199` and `7185550199` to `7185550199`.
   - Step 0.3 should move both into the app's own layer.
 - **Fixtures:** `scripts/family/fixtures/mirror-cases.sql` loads four hand-made families into `tendi_family_test` only (both parents, step-father only, no mother, two payment-responsible members). It never links a child, but its cleanup unlinks children of fixture families. Preview the cases with `CALL sp_family_preview(child, family)`. It is re-runnable and removes only its own rows (`families.name LIKE 'FIXTURE %'`, `people.note = 'fixture:mirror-cases'`).
   - `schema_migrations` columns: `id`, `version` (unique), `filename`, `checksum` (`char(40)`, SHA-1 of the file), `batch`, `status` (enum `applied` / `failed` / `skipped` / `baselined`), `applied_at`, `execution_ms`, `applied_by`, `error_message`.
@@ -98,13 +99,28 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 
 ## Validation and OpenAPI
 
-- **Validation library:** **TypeBox** (`typebox` 1.x, the current package; `@sinclair/typebox` is its 0.x predecessor). Fastify validates requests with its built-in Ajv against the TypeBox schemas. The env config is validated with TypeBox `Value` (`src/config.ts`).
-- **How schemas attach to routes:** TypeBox schemas go on each route's `schema` option (`params`, `querystring`, `body`, `response`, plus `tags` and `summary`), so the same definitions validate requests, type the handler, and produce the OpenAPI document. Shared schemas are added with `app.addSchema` and need a `$id`.
-- **@fastify/swagger / OpenAPI:** `@fastify/swagger` 9 builds an OpenAPI 3.0.3 document from the route schemas. The running app serves it at **`GET /openapi.json`** (`http://localhost:4000/openapi.json`). `npm run export:openapi` writes it to **`openapi/family.json`** (committed), which Tendi-new generates its types from. Today it holds `/health` and `ErrorResponse`; Step 3.3 adds the family routes.
+- **Validation library:** **TypeBox** (`typebox` 1.x, the current package; `@sinclair/typebox` is its 0.x predecessor). Fastify validates requests with its built-in Ajv against the TypeBox schemas.
+  - Request bodies and the search query have `additionalProperties: false`, and Ajv's `removeAdditional` is off (`src/app.ts`). An unknown or misspelled field therefore gets **400** ("must NOT have additional properties"), including a client-sent `phone_normalized`.
+  - Fields with a default are optional, and Ajv fills the default in.
+  - The staff auth runs in **`onRequest`**, before body parsing and schema validation, so an unauthenticated request gets **401** whatever its body. Schema validation (400) comes next.
+  - Rules JSON Schema cannot express run in a route preHandler **after** the auth (`src/modules/family/service/validation.ts`): exactly one primary phone when any exist; `collect_to >= collect_from`; each member once per child; exactly one of `person_id` or `person`.
+  - That file also enforces the **mirror limits**: limits on values that the legacy columns the mirror writes them to could not hold (the audit of all 28 columns is in the file header). Lengths are counted in characters (code points).
+    - email ≤ 150; home or work phone ≤ 30; `household_phone` ≤ 30 (the fallback for `*_home_phone`); formatted home or work address ≤ 255.
+    - A new person's default `legacy_full_name` ("fname lname") ≤ 100, unless `legacy_full_name` is sent.
+    - The OpenAPI schemas keep the column lengths; the field descriptions state these limits.
+  - The env config is validated with TypeBox `Value` (`src/config.ts`).
+- **How schemas attach to routes:** TypeBox schemas go on each route's `schema` option (`operationId`, `tags`, `summary`, `security`, `params`, `querystring`, `body`, `response`), so the same definitions validate requests, type the handler, and produce the OpenAPI document.
+  - Family request schemas: `src/modules/family/schemas/requests.ts`. Response models: `schemas/models.ts`, each with a `$id`, added on the root instance (`familySchemas`) and referenced with `Type.Ref('<Name>')`.
+  - Allowed values: one exported constant each in `schemas/values.ts`: `RELATIONSHIPS` (the 19 values, SCHEMA.md), `NOTIFY_METHODS`, `PHONE_CHANNELS`, `PHONE_LABELS`, `ADDRESS_KINDS`, `RECORD_STATUSES`.
+  - Every family route has an `operationId` (camelCase verb + noun: `searchFamilies`, `linkChild`, …) and the tag **`family`**.
+- **@fastify/swagger / OpenAPI:** `@fastify/swagger` 9 builds an **OpenAPI 3.1.0** document from the route schemas. It is 3.1 because nullable fields are JSON Schema `{"type": "null"}` unions.
+  - **Stable local URL: `http://localhost:4000/openapi.json`** (`GET /openapi.json`, hidden from the document itself). `npm run export:openapi` writes it to **`openapi/family.json`** (committed), which Tendi-new generates its types from (its step 4.1).
+  - Shared schemas appear under `components.schemas` by their `$id`. The staff token is the `bearerAuth` security scheme.
+  - Since step 3.3 it describes every endpoint of the PLAN.md table, plus `GET /staff/me` and `GET /health/family`. Routes whose handler is not built yet answer **501** `"<operationId> is not implemented yet"` behind the staff auth; their contract is final.
 
 ## Auth and roles
 
-- **Current user resolution:** the family module's auth preHandler (`src/modules/family/auth.ts`, `service/auth.ts`), on every route in its protected scope. There is no new login system.
+- **Current user resolution:** the family module's auth hook (`src/modules/family/auth.ts`, `service/auth.ts`), an **`onRequest`** hook on every route in its protected scope. It runs before parsing and validation, and CORS preflights (OPTIONS) never reach it. There is no new login system.
   - It reads `Authorization: Bearer <token>` and looks up the token's md5 (lowercase hex) in `admin_api_tokens.token_hash` ("the same form `admin.login_auth` uses"), joined to `admin`.
   - It requires `admin.status = 'active'`. When the request is also allowed by the role check, it updates `last_seen_at` (at most once a minute per token); a 401 or 403 leaves `last_seen_at` untouched.
   - **No expiry check yet:** any stored token of an active admin works. The expiry rule and the hash format wait on the PHP team (open question 4); `service/auth.ts` marks the place with `TODO(php-team)`.
@@ -123,7 +139,10 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 ## Logging, errors, config, jobs, alerting
 
 - **Logging:** Fastify's built-in logger (pino, JSON lines on stdout) at `LOG_LEVEL` (default `info`); request logging is on. The family CLIs (backfill, proof run, reconcile) print to stdout and stderr, which the scheduler captures.
-- **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler and validation errors (400). For 5xx the message is the generic "Internal Server Error" and the details go to the log only. The schema is registered as `ErrorResponse` for routes' `response` sections.
+- **Error response format:** every error is `{ statusCode, error, message }` (`src/errors.ts`): the error handler, the 404 handler, validation errors (400) and the rule checks (400).
+  - Deliberate errors are `HttpError(statusCode, message)` and keep their message, including 501.
+  - Any other 5xx answers the generic "Internal Server Error", and the details go to the log only.
+  - The schema is registered as `ErrorResponse`; routes list it for 400/401/403/404/409/501.
 - **Config/env loading:** `src/config.ts` (`loadConfig`) reads `.env` (git-ignored); variables already set in the environment win. It validates the values with TypeBox at startup, and stops with `invalid configuration (see .env.example): …` if one is missing or wrong.
   - App keys: `NODE_ENV`, `HOST`, `PORT`, `LOG_LEVEL`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_POOL_SIZE`, `REDIS_URL` (optional) and `CORS_ORIGIN`. Empty or undefined values count as unset. The family module adds `FAMILY_DB_USER`, `FAMILY_DB_PASSWORD`, `FAMILY_DB_POOL_SIZE` and `FAMILY_ALLOWED_STAFF_TYPES`, validated by the same `readEnvSchema` (`src/modules/family/config.ts`).
   - `.env.example` (committed) also lists the script-only keys `DB_TEST_NAME`, `FAMILY_DUMP_PATH`, `MARIADB_BIN_DIR` and `FAMILY_DB_PERF_TARGET_MS`. The `scripts/family/*.sh` scripts and `scripts/family/lib/db.ts` keep their own `.env` readers.

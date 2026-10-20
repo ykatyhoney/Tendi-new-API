@@ -3,6 +3,7 @@
 // admin.login_auth uses); the admin must be active, and their admin.type must be allowed (D5).
 
 import { createHash } from 'node:crypto';
+import { HttpError } from '../../../errors.ts';
 import type { FamilyDb } from '../db.ts';
 import { findStaffByTokenHash, touchToken } from '../repository/staff.ts';
 
@@ -11,16 +12,6 @@ export interface Staff {
   adminId: number;
   type: string;
   name: string;
-}
-
-/** An error the app's error handler turns into { statusCode, error, message }. */
-export class HttpError extends Error {
-  readonly statusCode: number;
-
-  constructor(statusCode: number, message: string) {
-    super(message);
-    this.statusCode = statusCode;
-  }
 }
 
 export function bearerToken(authorization: string | undefined): string | null {

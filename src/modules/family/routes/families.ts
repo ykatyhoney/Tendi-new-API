@@ -1,0 +1,185 @@
+// /families routes (PLAN.md "Family API"). Contracts are final; handlers arrive in later steps.
+
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import Type from 'typebox';
+import type { FastifyInstance } from 'fastify';
+import {
+  AddMemberBody,
+  CreateFamilyBody,
+  FamilyChildParams,
+  FamilyMemberParams,
+  FamilyParams,
+  SearchFamiliesQuery,
+  SetChildRightsBody,
+  UpdateFamilyBody,
+  UpdateMemberBody,
+} from '../schemas/requests.ts';
+import { checkAddMember, checkHouseholdPhone, checkRights } from '../service/validation.ts';
+import { FAMILY_TAG, READ_ERRORS, WRITE_ERRORS, errorResponses, notImplemented } from './common.ts';
+
+const security = [{ bearerAuth: [] }];
+
+export function registerFamilyRoutes(scope: FastifyInstance): void {
+  const app = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+  app.get(
+    '/families',
+    {
+      schema: {
+        operationId: 'searchFamilies',
+        tags: [FAMILY_TAG],
+        summary: 'Search families by family name, person name or phone (phone_normalized)',
+        security,
+        querystring: SearchFamiliesQuery,
+        response: { 200: Type.Ref('FamilySearchResult'), ...errorResponses(400, 401, 403, 501) },
+      },
+    },
+    notImplemented('searchFamilies'),
+  );
+
+  app.post(
+    '/families',
+    {
+      schema: {
+        operationId: 'createFamily',
+        tags: [FAMILY_TAG],
+        summary: 'Create a household',
+        security,
+        body: CreateFamilyBody,
+        response: { 201: Type.Ref('Family'), ...errorResponses(400, 401, 403, 409, 501) },
+      },
+      preHandler: async (request) => checkHouseholdPhone(request.body.household_phone),
+    },
+    notImplemented('createFamily'),
+  );
+
+  app.get(
+    '/families/:id',
+    {
+      schema: {
+        operationId: 'getFamily',
+        tags: [FAMILY_TAG],
+        summary: 'Household with members, phones, addresses, linked children and their rights',
+        security,
+        params: FamilyParams,
+        response: { 200: Type.Ref('Family'), ...errorResponses(...READ_ERRORS) },
+      },
+    },
+    notImplemented('getFamily'),
+  );
+
+  app.patch(
+    '/families/:id',
+    {
+      schema: {
+        operationId: 'updateFamily',
+        tags: [FAMILY_TAG],
+        summary: 'Edit the household name or household phone',
+        security,
+        params: FamilyParams,
+        body: UpdateFamilyBody,
+        response: { 200: Type.Ref('Family'), ...errorResponses(...WRITE_ERRORS) },
+      },
+      preHandler: async (request) => checkHouseholdPhone(request.body.household_phone),
+    },
+    notImplemented('updateFamily'),
+  );
+
+  app.post(
+    '/families/:id/members',
+    {
+      schema: {
+        operationId: 'addFamilyMember',
+        tags: [FAMILY_TAG],
+        summary: 'Add a person (existing: person_id; new: person) with a relationship',
+        security,
+        params: FamilyParams,
+        body: AddMemberBody,
+        response: { 201: Type.Ref('FamilyMember'), ...errorResponses(...WRITE_ERRORS) },
+      },
+      preHandler: async (request) => checkAddMember(request.body),
+    },
+    notImplemented('addFamilyMember'),
+  );
+
+  app.patch(
+    '/families/:id/members/:memberId',
+    {
+      schema: {
+        operationId: 'updateFamilyMember',
+        tags: [FAMILY_TAG],
+        summary: 'Change the relationship, primary flag or display order of a member',
+        security,
+        params: FamilyMemberParams,
+        body: UpdateMemberBody,
+        response: { 200: Type.Ref('FamilyMember'), ...errorResponses(...WRITE_ERRORS) },
+      },
+    },
+    notImplemented('updateFamilyMember'),
+  );
+
+  app.delete(
+    '/families/:id/members/:memberId',
+    {
+      schema: {
+        operationId: 'removeFamilyMember',
+        tags: [FAMILY_TAG],
+        summary: 'Remove a member (sets status trash)',
+        security,
+        params: FamilyMemberParams,
+        response: { 204: Type.Null({ description: 'Removed' }), ...errorResponses(...WRITE_ERRORS) },
+      },
+    },
+    notImplemented('removeFamilyMember'),
+  );
+
+  app.put(
+    '/families/:id/children/:childId/rights',
+    {
+      schema: {
+        operationId: 'setChildRights',
+        tags: [FAMILY_TAG],
+        summary: "Set every member's rights for one child (notifications, collection, emergency, payment)",
+        security,
+        params: FamilyChildParams,
+        body: SetChildRightsBody,
+        response: {
+          200: Type.Object({ rights: Type.Array(Type.Ref('ChildRight')) }),
+          ...errorResponses(...WRITE_ERRORS),
+        },
+      },
+      preHandler: async (request) => checkRights(request.body.rights),
+    },
+    notImplemented('setChildRights'),
+  );
+
+  app.get(
+    '/families/:id/children/:childId/preview',
+    {
+      schema: {
+        operationId: 'previewChildLink',
+        tags: [FAMILY_TAG],
+        summary: 'The 28 mirrored legacy values now and after linking the child to this family',
+        security,
+        params: FamilyChildParams,
+        response: { 200: Type.Ref('LinkPreview'), ...errorResponses(...READ_ERRORS) },
+      },
+    },
+    notImplemented('previewChildLink'),
+  );
+
+  app.post(
+    '/families/:id/children/:childId/link',
+    {
+      schema: {
+        operationId: 'linkChild',
+        tags: [FAMILY_TAG],
+        summary: 'Link the child (sets children.family_id; the mirror then owns its parent columns)',
+        security,
+        params: FamilyChildParams,
+        response: { 200: Type.Ref('LinkResult'), ...errorResponses(...WRITE_ERRORS) },
+      },
+    },
+    notImplemented('linkChild'),
+  );
+}

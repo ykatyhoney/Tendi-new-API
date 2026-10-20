@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.3",
+  "openapi": "3.1.0",
   "info": {
     "title": "Tendi Family API",
     "version": "0.1.0"
@@ -31,12 +31,1001 @@
           }
         },
         "description": "Error response, used by every route"
+      },
+      "PersonPhone": {
+        "type": "object",
+        "required": [
+          "id",
+          "phone",
+          "phone_normalized",
+          "label",
+          "channel",
+          "is_primary",
+          "sort_order"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "As typed"
+          },
+          "phone_normalized": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "Computed by the API: digits only, last 10 (\"\" below 10 digits)"
+          },
+          "label": {
+            "type": "string",
+            "enum": [
+              "mobile",
+              "home",
+              "work"
+            ],
+            "maxLength": 32,
+            "description": "people_phones.label"
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "none",
+              "sms",
+              "voice",
+              "both"
+            ],
+            "maxLength": 5,
+            "description": "people_phones.channel"
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer"
+          }
+        }
+      },
+      "PersonAddress": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "line1",
+          "line2",
+          "city",
+          "state",
+          "zip"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "home",
+              "work",
+              "billing"
+            ],
+            "maxLength": 32,
+            "description": "people_addresses.kind"
+          },
+          "line1": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "line2": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "city": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "state": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "zip": {
+            "type": "string",
+            "maxLength": 15
+          }
+        }
+      },
+      "Person": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "legacy_full_name",
+          "hebrew_name",
+          "email",
+          "note",
+          "occupation",
+          "employer",
+          "status",
+          "phones",
+          "addresses",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "fname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "legacy_full_name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Mirrored verbatim to children.father_name / mother_name"
+          },
+          "hebrew_name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16777215
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occupation": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "employer": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhone"
+            }
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonAddress"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          }
+        }
+      },
+      "FamilyMember": {
+        "type": "object",
+        "required": [
+          "id",
+          "family_id",
+          "person_id",
+          "relationship",
+          "is_primary",
+          "sort_order",
+          "status",
+          "person"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "person_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "father",
+              "mother",
+              "step_father",
+              "step_mother",
+              "guardian",
+              "foster_parent",
+              "grandfather",
+              "grandmother",
+              "brother",
+              "sister",
+              "uncle",
+              "aunt",
+              "cousin",
+              "nanny",
+              "babysitter",
+              "car_service",
+              "doctor",
+              "family_friend",
+              "other"
+            ],
+            "maxLength": 32,
+            "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          }
+        }
+      },
+      "ChildRight": {
+        "type": "object",
+        "required": [
+          "id",
+          "member_id",
+          "child_id",
+          "is_primary",
+          "receives_notifications",
+          "notify_method",
+          "may_collect",
+          "collect_from",
+          "collect_to",
+          "is_emergency",
+          "is_payment_responsible"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "member_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "child_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "receives_notifications": {
+            "type": "boolean"
+          },
+          "notify_method": {
+            "type": "string",
+            "enum": [
+              "sms",
+              "voice",
+              "both"
+            ],
+            "maxLength": 5,
+            "description": "family_member_children.notify_method"
+          },
+          "may_collect": {
+            "type": "boolean"
+          },
+          "collect_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "collect_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_emergency": {
+            "type": "boolean"
+          },
+          "is_payment_responsible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LinkedChild": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "rights"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "fname": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "lname": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "rights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChildRight"
+            }
+          }
+        },
+        "description": "A child with children.family_id = this family"
+      },
+      "Family": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "household_phone",
+          "status",
+          "created_at",
+          "updated_at",
+          "members",
+          "children"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "household_phone": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Mirrored to children.home_phone"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FamilyMember"
+            }
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LinkedChild"
+            }
+          }
+        }
+      },
+      "FamilySummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "household_phone",
+          "status",
+          "members",
+          "children"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "household_phone": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "person_id",
+                "name",
+                "relationship",
+                "is_primary"
+              ],
+              "properties": {
+                "person_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 201
+                },
+                "relationship": {
+                  "type": "string",
+                  "enum": [
+                    "father",
+                    "mother",
+                    "step_father",
+                    "step_mother",
+                    "guardian",
+                    "foster_parent",
+                    "grandfather",
+                    "grandmother",
+                    "brother",
+                    "sister",
+                    "uncle",
+                    "aunt",
+                    "cousin",
+                    "nanny",
+                    "babysitter",
+                    "car_service",
+                    "doctor",
+                    "family_friend",
+                    "other"
+                  ],
+                  "maxLength": 32,
+                  "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+                },
+                "is_primary": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "children": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "fname",
+                "lname"
+              ],
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "fname": {
+                  "type": "string",
+                  "maxLength": 25
+                },
+                "lname": {
+                  "type": "string",
+                  "maxLength": 25
+                }
+              }
+            }
+          }
+        }
+      },
+      "FamilySearchResult": {
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FamilySummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "LegacyParentValues": {
+        "type": "object",
+        "required": [
+          "father_name",
+          "mother_name",
+          "father_phone",
+          "mother_phone",
+          "home_phone",
+          "parent_email",
+          "use_father_phone_for_notification",
+          "use_mother_phone_for_notification",
+          "notification_father_phone_method",
+          "notification_mother_phone_method",
+          "father_fname",
+          "father_lname",
+          "father_home_phone",
+          "father_email",
+          "father_address",
+          "father_occupation",
+          "father_employer",
+          "father_work_address",
+          "father_office_phone",
+          "mother_fname",
+          "mother_lname",
+          "mother_home_phone",
+          "mother_email",
+          "mother_address",
+          "mother_occupation",
+          "mother_employer",
+          "mother_work_address",
+          "mother_office_phone"
+        ],
+        "properties": {
+          "father_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "mother_name": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "father_phone": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "mother_phone": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "home_phone": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "parent_email": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "use_father_phone_for_notification": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "use_mother_phone_for_notification": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notification_father_phone_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sms",
+                  "voice",
+                  "both"
+                ],
+                "maxLength": 5,
+                "description": "family_member_children.notify_method"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "notification_mother_phone_method": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sms",
+                  "voice",
+                  "both"
+                ],
+                "maxLength": 5,
+                "description": "family_member_children.notify_method"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_fname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_lname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_home_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_occupation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_employer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_work_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "father_office_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_fname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_lname": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_home_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_occupation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_employer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 150
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_work_address": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mother_office_phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 30
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "LinkPreview": {
+        "type": "object",
+        "required": [
+          "child_id",
+          "family_id",
+          "current",
+          "after_link",
+          "changed"
+        ],
+        "properties": {
+          "child_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "current": {
+            "$ref": "#/components/schemas/LegacyParentValues"
+          },
+          "after_link": {
+            "$ref": "#/components/schemas/LegacyParentValues"
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Columns whose value would change"
+          }
+        }
+      },
+      "LinkResult": {
+        "type": "object",
+        "required": [
+          "child_id",
+          "family_id"
+        ],
+        "properties": {
+          "child_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "description": "children.family_id after the change (null = unlinked)"
+      },
+      "StaffMember": {
+        "type": "object",
+        "required": [
+          "admin_id",
+          "type",
+          "name"
+        ],
+        "properties": {
+          "admin_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "type": {
+            "type": "string",
+            "description": "admin.type"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       }
     }
   },
   "paths": {
     "/health": {
       "get": {
+        "operationId": "getHealth",
         "summary": "Liveness check of the API, its database pool and Redis",
         "tags": [
           "health"
@@ -189,6 +1178,7 @@
     },
     "/health/family": {
       "get": {
+        "operationId": "getFamilyHealth",
         "summary": "Family module check: its database pool (family_api account)",
         "tags": [
           "family"
@@ -295,6 +1285,7 @@
     },
     "/staff/me": {
       "get": {
+        "operationId": "getCurrentStaff",
         "summary": "The signed-in staff member (bearer token)",
         "tags": [
           "family"
@@ -310,30 +1301,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "adminId",
-                    "type",
-                    "name"
-                  ],
-                  "properties": {
-                    "adminId": {
-                      "type": "integer"
-                    },
-                    "type": {
-                      "type": "string",
-                      "description": "admin.type"
-                    },
-                    "name": {
-                      "type": "string"
-                    }
-                  }
+                  "$ref": "#/components/schemas/StaffMember"
                 }
               }
             }
           },
           "401": {
-            "description": "Error response, used by every route",
+            "description": "Missing, unknown or inactive staff token",
             "content": {
               "application/json": {
                 "schema": {
@@ -343,7 +1317,1891 @@
             }
           },
           "403": {
-            "description": "Error response, used by every route",
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families": {
+      "get": {
+        "operationId": "searchFamilies",
+        "summary": "Search families by family name, person name or phone (phone_normalized)",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "Family name, person name, or any phone (matched on phone_normalized)"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilySearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createFamily",
+        "summary": "Create a household",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "household_phone": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "Column varchar(255); the API accepts at most 30 characters (mirrored as the legacy home phone fallback, varchar(30))",
+                    "default": ""
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Family"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}": {
+      "get": {
+        "operationId": "getFamily",
+        "summary": "Household with members, phones, addresses, linked children and their rights",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Family"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateFamily",
+        "summary": "Edit the household name or household phone",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "household_phone": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "Column varchar(255); the API accepts at most 30 characters (mirrored as the legacy home phone fallback, varchar(30))"
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Family"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}/members": {
+      "post": {
+        "operationId": "addFamilyMember",
+        "summary": "Add a person (existing: person_id; new: person) with a relationship",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "relationship"
+                ],
+                "properties": {
+                  "person_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "person": {
+                    "type": "object",
+                    "properties": {
+                      "fname": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "default": ""
+                      },
+                      "lname": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "default": ""
+                      },
+                      "legacy_full_name": {
+                        "type": "string",
+                        "maxLength": 100,
+                        "description": "Mirrored verbatim to the legacy father_name / mother_name. For a new person it defaults to \"fname lname\", which must then be at most 100 characters"
+                      },
+                      "hebrew_name": {
+                        "type": "string",
+                        "maxLength": 255
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 255,
+                        "description": "Column varchar(255); the API accepts at most 150 characters (legacy *_email is varchar(150))"
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 16777215
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "occupation": {
+                        "type": "string",
+                        "maxLength": 150
+                      },
+                      "employer": {
+                        "type": "string",
+                        "maxLength": 150
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "relationship": {
+                    "type": "string",
+                    "enum": [
+                      "father",
+                      "mother",
+                      "step_father",
+                      "step_mother",
+                      "guardian",
+                      "foster_parent",
+                      "grandfather",
+                      "grandmother",
+                      "brother",
+                      "sister",
+                      "uncle",
+                      "aunt",
+                      "cousin",
+                      "nanny",
+                      "babysitter",
+                      "car_service",
+                      "doctor",
+                      "family_friend",
+                      "other"
+                    ],
+                    "maxLength": 32,
+                    "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+                  },
+                  "is_primary": {
+                    "type": "boolean",
+                    "default": false
+                  },
+                  "sort_order": {
+                    "type": "integer",
+                    "default": 0
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Exactly one of person_id (an existing person) or person (a new one)."
+              }
+            }
+          },
+          "description": "Exactly one of person_id (an existing person) or person (a new one)."
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMember"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}/members/{memberId}": {
+      "patch": {
+        "operationId": "updateFamilyMember",
+        "summary": "Change the relationship, primary flag or display order of a member",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "relationship": {
+                    "type": "string",
+                    "enum": [
+                      "father",
+                      "mother",
+                      "step_father",
+                      "step_mother",
+                      "guardian",
+                      "foster_parent",
+                      "grandfather",
+                      "grandmother",
+                      "brother",
+                      "sister",
+                      "uncle",
+                      "aunt",
+                      "cousin",
+                      "nanny",
+                      "babysitter",
+                      "car_service",
+                      "doctor",
+                      "family_friend",
+                      "other"
+                    ],
+                    "maxLength": 32,
+                    "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+                  },
+                  "is_primary": {
+                    "type": "boolean"
+                  },
+                  "sort_order": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "memberId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMember"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "removeFamilyMember",
+        "summary": "Remove a member (sets status trash)",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "memberId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}/children/{childId}/rights": {
+      "put": {
+        "operationId": "setChildRights",
+        "summary": "Set every member's rights for one child (notifications, collection, emergency, payment)",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rights"
+                ],
+                "properties": {
+                  "rights": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "member_id"
+                      ],
+                      "properties": {
+                        "member_id": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 2147483647
+                        },
+                        "is_primary": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "receives_notifications": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "notify_method": {
+                          "type": "string",
+                          "enum": [
+                            "sms",
+                            "voice",
+                            "both"
+                          ],
+                          "maxLength": 5,
+                          "description": "family_member_children.notify_method",
+                          "default": "sms"
+                        },
+                        "may_collect": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "collect_from": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "collect_to": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "format": "date"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "default": null
+                        },
+                        "is_emergency": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "is_payment_responsible": {
+                          "type": "boolean",
+                          "default": false
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "maxItems": 50
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The full set for this child in this family; collect_to >= collect_from."
+              }
+            }
+          },
+          "description": "The full set for this child in this family; collect_to >= collect_from."
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rights"
+                  ],
+                  "properties": {
+                    "rights": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ChildRight"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}/children/{childId}/preview": {
+      "get": {
+        "operationId": "previewChildLink",
+        "summary": "The 28 mirrored legacy values now and after linking the child to this family",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/{id}/children/{childId}/link": {
+      "post": {
+        "operationId": "linkChild",
+        "summary": "Link the child (sets children.family_id; the mirror then owns its parent columns)",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "children.family_id after the change (null = unlinked)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{id}": {
+      "patch": {
+        "operationId": "updatePerson",
+        "summary": "Edit a person's names, email, note, occupation or employer",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fname": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "lname": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "legacy_full_name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "description": "Mirrored verbatim to the legacy father_name / mother_name. For a new person it defaults to \"fname lname\", which must then be at most 100 characters"
+                  },
+                  "hebrew_name": {
+                    "type": "string",
+                    "maxLength": 255
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "description": "Column varchar(255); the API accepts at most 150 characters (legacy *_email is varchar(150))"
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 16777215
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "occupation": {
+                    "type": "string",
+                    "maxLength": 150
+                  },
+                  "employer": {
+                    "type": "string",
+                    "maxLength": 150
+                  }
+                },
+                "additionalProperties": false,
+                "minProperties": 1
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Person"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{id}/phones": {
+      "put": {
+        "operationId": "replacePersonPhones",
+        "summary": "Replace the person's phone list (as typed; phone_normalized is computed)",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "phones"
+                ],
+                "properties": {
+                  "phones": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "phone",
+                        "label"
+                      ],
+                      "properties": {
+                        "phone": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 255,
+                          "description": "As typed; phone_normalized is computed. A home or work phone may have at most 30 characters (legacy varchar(30))"
+                        },
+                        "label": {
+                          "type": "string",
+                          "enum": [
+                            "mobile",
+                            "home",
+                            "work"
+                          ],
+                          "maxLength": 32,
+                          "description": "people_phones.label"
+                        },
+                        "channel": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "sms",
+                            "voice",
+                            "both"
+                          ],
+                          "maxLength": 5,
+                          "description": "people_phones.channel",
+                          "default": "sms"
+                        },
+                        "is_primary": {
+                          "type": "boolean",
+                          "default": false
+                        },
+                        "sort_order": {
+                          "type": "integer",
+                          "description": "Defaults to the position in the list"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The full list; exactly one is_primary when the list is not empty."
+              }
+            }
+          },
+          "description": "The full list; exactly one is_primary when the list is not empty."
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "phones"
+                  ],
+                  "properties": {
+                    "phones": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersonPhone"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/people/{id}/addresses": {
+      "put": {
+        "operationId": "replacePersonAddresses",
+        "summary": "Replace the person's address list",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "addresses"
+                ],
+                "properties": {
+                  "addresses": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "kind"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "home",
+                            "work",
+                            "billing"
+                          ],
+                          "maxLength": 32,
+                          "description": "people_addresses.kind"
+                        },
+                        "line1": {
+                          "type": "string",
+                          "maxLength": 255,
+                          "default": ""
+                        },
+                        "line2": {
+                          "type": "string",
+                          "maxLength": 255,
+                          "default": ""
+                        },
+                        "city": {
+                          "type": "string",
+                          "maxLength": 100,
+                          "default": ""
+                        },
+                        "state": {
+                          "type": "string",
+                          "maxLength": 25,
+                          "default": ""
+                        },
+                        "zip": {
+                          "type": "string",
+                          "maxLength": 15,
+                          "default": ""
+                        }
+                      },
+                      "additionalProperties": false,
+                      "description": "A home or work address is mirrored as \"line1, line2, city, state zip\"; that text may have at most 255 characters"
+                    },
+                    "maxItems": 10
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "addresses"
+                  ],
+                  "properties": {
+                    "addresses": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersonAddress"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/children/{childId}/unlink": {
+      "post": {
+        "operationId": "unlinkChild",
+        "summary": "Unlink the child (children.family_id back to NULL; the parent columns keep their values)",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "children.family_id after the change (null = unlinked)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -359,6 +3217,12 @@
   "servers": [
     {
       "url": "http://localhost:4000"
+    }
+  ],
+  "tags": [
+    {
+      "name": "family",
+      "description": "Family API (PLAN.md \"Family API\"); staff bearer token required"
     }
   ]
 }
