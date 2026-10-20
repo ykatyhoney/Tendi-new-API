@@ -91,7 +91,7 @@ describe('lock', () => {
     assert.equal(await lockLogCount(db(), child), 0);
   });
 
-  test('unlink keeps all 29 values; legacy edits save again afterwards', async () => {
+  test('unlink keeps all 28 mirrored values; legacy edits save again afterwards', async () => {
     const { child } = await linkedChild();
     const before = await storedLegacy(db(), child);
 

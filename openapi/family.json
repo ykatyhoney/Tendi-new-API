@@ -180,6 +180,112 @@
           }
         }
       }
+    },
+    "/health/family": {
+      "get": {
+        "summary": "Family module check: its database pool (family_api account)",
+        "tags": [
+          "family"
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "db"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "error"
+                          ]
+                        }
+                      ]
+                    },
+                    "db": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "down"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "db"
+                  ],
+                  "properties": {
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "error"
+                          ]
+                        }
+                      ]
+                    },
+                    "db": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "down"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "servers": [

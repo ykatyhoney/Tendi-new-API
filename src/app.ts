@@ -10,6 +10,7 @@ import type { Pool } from 'mysql2/promise';
 import { type Config, loadConfig } from './config.ts';
 import { createPool } from './db/pool.ts';
 import { ErrorResponse, registerErrorHandling } from './errors.ts';
+import familyModule from './modules/family/index.ts';
 import healthModule from './modules/health/index.ts';
 import { connectRedis, type RedisClient } from './redis.ts';
 
@@ -55,6 +56,7 @@ export async function buildApp(config: Config = loadConfig()) {
   app.get(OPENAPI_JSON_PATH, { schema: { hide: true } }, async () => app.swagger());
 
   await app.register(healthModule);
+  await app.register(familyModule);
 
   return app;
 }

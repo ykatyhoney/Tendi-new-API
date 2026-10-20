@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
-import Type, { type Static } from 'typebox';
+import Type, { type Static, type TObject } from 'typebox';
 import Value from 'typebox/value';
 
 export const API_ROOT = join(import.meta.dirname, '..');
@@ -56,17 +56,29 @@ function readEnvFile(): Record<string, string | undefined> {
   return existsSync(file) ? parseEnv(readFileSync(file, 'utf8')) : {};
 }
 
-export function loadConfig(environment: Record<string, string | undefined> = process.env): Config {
+/**
+ * Validates environment variables against a TypeBox object schema: .env values, overridden by
+ * `environment`; empty values count as unset (except `keepEmpty`); defaults applied, strings
+ * converted. Throws one error listing every problem. Modules use this for their own config.
+ */
+export function readEnvSchema<S extends TObject>(
+  schema: S,
+  environment: Record<string, string | undefined> = process.env,
+  keepEmpty: string[] = [],
+): Static<S> {
   const raw: Record<string, unknown> = { ...readEnvFile(), ...environment };
-  for (const key of Object.keys(raw)) if (raw[key] === '' && key !== 'DB_PASSWORD') delete raw[key];
+  for (const key of Object.keys(raw)) if (raw[key] === '' && !keepEmpty.includes(key)) delete raw[key];
 
-  const env = Value.Default(EnvSchema, Value.Convert(EnvSchema, Value.Clean(EnvSchema, raw)));
-  if (!Value.Check(EnvSchema, env)) {
-    const problems = [...Value.Errors(EnvSchema, env)].map(
-      (e) => `${e.instancePath.slice(1) || '(root)'} ${e.message}`,
-    );
+  const env = Value.Default(schema, Value.Convert(schema, Value.Clean(schema, raw)));
+  if (!Value.Check(schema, env)) {
+    const problems = [...Value.Errors(schema, env)].map((e) => `${e.instancePath.slice(1) || '(root)'} ${e.message}`);
     throw new Error(`invalid configuration (see .env.example): ${problems.join('; ')}`);
   }
+  return env;
+}
+
+export function loadConfig(environment: Record<string, string | undefined> = process.env): Config {
+  const env = readEnvSchema(EnvSchema, environment, ['DB_PASSWORD']);
 
   return {
     env: env.NODE_ENV,
