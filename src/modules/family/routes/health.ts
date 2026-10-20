@@ -18,6 +18,7 @@ export function registerHealthRoutes(app: FastifyInstance, db: FamilyDb): void {
     '/health/family',
     {
       schema: {
+        operationId: 'getFamilyHealth',
         tags: ['family'],
         summary: 'Family module check: its database pool (family_api account)',
         response: { 200: FamilyHealth, 503: FamilyHealth },

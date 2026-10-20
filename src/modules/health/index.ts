@@ -18,6 +18,7 @@ export default async function healthModule(app: FastifyInstance): Promise<void> 
     '/health',
     {
       schema: {
+        operationId: 'getHealth',
         tags: ['health'],
         summary: 'Liveness check of the API, its database pool and Redis',
         response: { 200: Health, 503: Health },

@@ -3,31 +3,23 @@
 
 import Type from 'typebox';
 import type { FastifyInstance } from 'fastify';
-
-const StaffMember = Type.Object(
-  {
-    adminId: Type.Integer(),
-    type: Type.String({ description: 'admin.type' }),
-    name: Type.String(),
-  },
-  { $id: 'StaffMember' },
-);
+import { FAMILY_TAG, errorResponses } from './common.ts';
 
 export function registerStaffRoutes(app: FastifyInstance): void {
   app.get(
     '/staff/me',
     {
       schema: {
-        tags: ['family'],
+        operationId: 'getCurrentStaff',
+        tags: [FAMILY_TAG],
         summary: 'The signed-in staff member (bearer token)',
         security: [{ bearerAuth: [] }],
-        response: {
-          200: StaffMember,
-          401: Type.Ref('ErrorResponse'),
-          403: Type.Ref('ErrorResponse'),
-        },
+        response: { 200: Type.Ref('StaffMember'), ...errorResponses(401, 403) },
       },
     },
-    async (request) => request.staff,
+    async (request) => {
+      const staff = request.staff!;
+      return { admin_id: staff.adminId, type: staff.type, name: staff.name };
+    },
   );
 }

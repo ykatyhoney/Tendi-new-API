@@ -75,7 +75,7 @@ describe('family staff auth', () => {
       "SELECT TRIM(CONCAT(fname, ' ', lname)) AS name FROM admin WHERE id = ?",
       [adminIds.admin],
     );
-    assert.deepEqual(res.json(), { adminId: adminIds.admin, type: 'admin', name: a.name });
+    assert.deepEqual(res.json(), { admin_id: adminIds.admin, type: 'admin', name: a.name });
 
     const [[t]] = await admin.query<RowDataPacket[]>(
       "SELECT last_seen_at > NOW() - INTERVAL 1 MINUTE AS fresh FROM admin_api_tokens WHERE token_hash = MD5(?)",

@@ -14,6 +14,16 @@ export const ErrorResponse = Type.Object(
   { $id: 'ErrorResponse', description: 'Error response, used by every route' },
 );
 
+/** An error the error handler turns into { statusCode, error, message } with this status. */
+export class HttpError extends Error {
+  readonly statusCode: number;
+
+  constructor(statusCode: number, message: string) {
+    super(message);
+    this.statusCode = statusCode;
+  }
+}
+
 export function errorBody(statusCode: number, message: string) {
   return { statusCode, error: STATUS_CODES[statusCode] ?? 'Error', message };
 }
@@ -21,8 +31,11 @@ export function errorBody(statusCode: number, message: string) {
 export function registerErrorHandling(app: FastifyInstance): void {
   app.setErrorHandler((error: FastifyError, request, reply) => {
     const statusCode = error.statusCode !== undefined && error.statusCode >= 400 ? error.statusCode : 500;
-    if (statusCode >= 500) request.log.error({ err: error }, 'request failed');
-    reply.status(statusCode).send(errorBody(statusCode, statusCode >= 500 ? 'Internal Server Error' : error.message));
+    // A deliberate HttpError (e.g. 501 "not implemented yet") keeps its message; any other 5xx is
+    // unexpected, so the client gets the generic text and the details go to the log.
+    const expose = statusCode < 500 || error instanceof HttpError;
+    if (!expose) request.log.error({ err: error }, 'request failed');
+    reply.status(statusCode).send(errorBody(statusCode, expose ? error.message : 'Internal Server Error'));
   });
 
   app.setNotFoundHandler((request, reply) => {
