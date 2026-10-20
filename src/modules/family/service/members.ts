@@ -9,7 +9,6 @@
 
 import { HttpError } from '../../../errors.ts';
 import type { FamilyDb, Queryable } from '../db.ts';
-import { type AuditChange, insertAuditLogs } from '../repository/audit-logs.ts';
 import { addressesOf, type FamilyRow, memberWithPerson, phonesOf } from '../repository/families.ts';
 import { linkedChildIdsOfFamily } from '../repository/legacy.ts';
 import {
@@ -25,16 +24,15 @@ import {
   updateMember as updateMemberRow,
 } from '../repository/members.ts';
 import { insertPerson, type PersonValues } from '../repository/people.ts';
+import { type AuditAction, type AuditChange, type AuditTarget, columnChanges, writeAudit } from './audit.ts';
 import type { Staff } from './auth.ts';
 import { activeFamily } from './families.ts';
 import { watchLegacy, withMirrorWarning } from './mirror-watch.ts';
-import { activePerson, memberView, personName } from './people.ts';
+import { activePerson, memberView, personTarget } from './people.ts';
+import { rightTarget } from './rights.ts';
 import { defaultLegacyName } from './validation.ts';
 
 const ER_DUP_ENTRY = 1062;
-
-const auditValue = (v: string | number | boolean | null) =>
-  v === null ? null : String(typeof v === 'boolean' ? Number(v) : v);
 
 async function loadMember(db: Queryable, memberId: number) {
   const member = await memberWithPerson(db, memberId);
@@ -55,25 +53,19 @@ const conflict = (personId: number, family: FamilyRow, memberId?: number) =>
 async function clearOtherPrimaries(conn: Queryable, family: FamilyRow, memberId: number): Promise<AuditChange[]> {
   const others = await otherPrimaryMembers(conn, family.id, memberId);
   for (const id of others) await updateMemberRow(conn, id, { is_primary: 0 });
-  return others.map((id) => memberAudit(family, id, 'update', 'is_primary', '1', '0'));
+  return others.flatMap((id) =>
+    columnChanges(memberTarget(family, id), 'update', { is_primary: 1 }, { is_primary: 0 }),
+  );
 }
 
-const memberAudit = (
-  family: FamilyRow,
-  memberId: number,
-  action: AuditChange['action'],
-  column: string,
-  oldValue: string | null,
-  newValue: string | null,
-): AuditChange => ({
+const memberTarget = (family: FamilyRow, memberId: number): AuditTarget => ({
   table: 'family_members',
   tableId: memberId,
-  action,
-  column,
-  oldValue,
-  newValue,
   entityName: `Family ${family.name}`,
 });
+
+const statusChange = (family: FamilyRow, memberId: number, action: AuditAction, from: string, to: string) =>
+  columnChanges(memberTarget(family, memberId), action, { status: from }, { status: to });
 
 /** The member columns PATCH may change, compared with the stored row; their audit rows. */
 function memberChanges(family: FamilyRow, before: MembershipRow, edit: MemberEdit) {
@@ -83,10 +75,7 @@ function memberChanges(family: FamilyRow, before: MembershipRow, edit: MemberEdi
   if (edit.is_primary !== undefined && Number(edit.is_primary) !== before.is_primary)
     changes.is_primary = Number(edit.is_primary);
   if (edit.sort_order !== undefined && edit.sort_order !== before.sort_order) changes.sort_order = edit.sort_order;
-  const audit = (Object.keys(changes) as (keyof MemberValues)[]).map((c) =>
-    memberAudit(family, before.id, 'update', c, auditValue(before[c]), auditValue(changes[c] ?? null)),
-  );
-  return { changes, audit };
+  return { changes, audit: columnChanges(memberTarget(family, before.id), 'update', before, changes) };
 }
 
 /** What a restored member's rights become for every child: staff set them again explicitly. */
@@ -104,19 +93,9 @@ async function resetRights(conn: Queryable, family: FamilyRow, memberId: number)
   const audit: AuditChange[] = [];
   const changedIds: number[] = [];
   for (const right of await rightsOfMemberForUpdate(conn, memberId)) {
-    const columns = (Object.keys(RIGHTS_RESET) as (keyof RightFlags)[]).filter((c) => right[c] !== RIGHTS_RESET[c]);
-    if (columns.length > 0) changedIds.push(right.id);
-    for (const column of columns) {
-      audit.push({
-        table: 'family_member_children',
-        tableId: right.id,
-        action: 'update',
-        column,
-        oldValue: auditValue(right[column]),
-        newValue: auditValue(RIGHTS_RESET[column]),
-        entityName: `Family ${family.name}: child ${right.child_id}`,
-      });
-    }
+    const rows = columnChanges(rightTarget(family, right), 'update', right, RIGHTS_RESET);
+    if (rows.length > 0) changedIds.push(right.id);
+    audit.push(...rows);
   }
   await updateRights(conn, changedIds, RIGHTS_RESET);
   return audit;
@@ -181,18 +160,9 @@ export async function addMember(db: FamilyDb, staff: Staff, familyId: number, in
           employer: p.employer ?? '',
         };
         personId = await insertPerson(conn, values, staff.adminId);
-        const set = [...Object.keys(p), 'legacy_full_name'] as (keyof PersonValues)[];
-        for (const column of new Set(set)) {
-          audit.push({
-            table: 'people',
-            tableId: personId,
-            action: 'create',
-            column,
-            oldValue: null,
-            newValue: values[column],
-            entityName: `Person ${personName(values)}`,
-          });
-        }
+        // The columns the request set, and the derived legacy_full_name.
+        const set = [...new Set([...Object.keys(p), 'legacy_full_name'])];
+        audit.push(...columnChanges(personTarget({ id: personId, ...values }), 'insert', null, values, set));
       }
 
       let memberId: number;
@@ -200,7 +170,7 @@ export async function addMember(db: FamilyDb, staff: Staff, familyId: number, in
         memberId = existing.id;
         const { changes, audit: rows } = memberChanges(family, existing, wanted);
         await updateMemberRow(conn, memberId, { ...changes, status: 'active' });
-        audit.push(memberAudit(family, memberId, 'update', 'status', 'trash', 'active'), ...rows);
+        audit.push(...statusChange(family, memberId, 'update', 'trash', 'active'), ...rows);
         audit.push(...(await resetRights(conn, family, memberId)));
       } else {
         try {
@@ -210,14 +180,12 @@ export async function addMember(db: FamilyDb, staff: Staff, familyId: number, in
           throw error;
         }
         audit.push(
-          ...Object.entries({ person_id: personId, ...wanted }).map(([column, value]) =>
-            memberAudit(family, memberId, 'create', column, null, auditValue(value)),
-          ),
+          ...columnChanges(memberTarget(family, memberId), 'insert', null, { person_id: personId, ...wanted }),
         );
       }
       if (wanted.is_primary) audit.push(...(await clearOtherPrimaries(conn, family, memberId)));
 
-      await insertAuditLogs(conn, staff.adminId, audit);
+      await writeAudit(conn, staff, audit);
       return {
         body: await loadMember(conn, memberId),
         affected: await watch.changed(),
@@ -248,7 +216,7 @@ export async function updateMember(db: FamilyDb, staff: Staff, familyId: number,
       const { changes, audit } = memberChanges(family, member, edit);
       await updateMemberRow(conn, memberId, changes);
       if (edit.is_primary === true) audit.push(...(await clearOtherPrimaries(conn, family, memberId)));
-      await insertAuditLogs(conn, staff.adminId, audit);
+      await writeAudit(conn, staff, audit);
       return { body: await loadMember(conn, memberId), affected: await watch.changed() };
     },
     { auditUser: staff.adminId },
@@ -267,9 +235,7 @@ export async function removeMember(db: FamilyDb, staff: Staff, familyId: number,
       const { family } = await activeMember(conn, familyId, memberId);
       const watch = await watchLegacy(conn, await linkedChildIdsOfFamily(conn, familyId));
       await updateMemberRow(conn, memberId, { status: 'trash' });
-      await insertAuditLogs(conn, staff.adminId, [
-        memberAudit(family, memberId, 'delete', 'status', 'active', 'trash'),
-      ]);
+      await writeAudit(conn, staff, statusChange(family, memberId, 'delete', 'active', 'trash'));
       return { body: await loadMember(conn, memberId), affected: await watch.changed() };
     },
     { auditUser: staff.adminId },

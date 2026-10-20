@@ -97,7 +97,7 @@ describe('family_api grants', () => {
     const [[row]] = await db.query<RowDataPacket[]>('SELECT father_name, father_phone, parent_email FROM children WHERE id = ?', [child]);
     assert.deepEqual({ ...row }, { father_name: 'Avi Grants', father_phone: '347-555-0177', parent_email: 'avi.grants@example.test' });
 
-    const [audit] = await db.query("INSERT INTO audit_logs (type, table_name, action, user_id, actor_type, table_id) VALUES ('family', 'children', 'link', 1, 'admin', ?)", [child]);
+    const [audit] = await db.query("INSERT INTO audit_logs (type, table_name, action, user_id, actor_type, table_id) VALUES ('family_api', 'children', 'link', 1, 'admin', ?)", [child]);
     assert.equal((audit as { affectedRows: number }).affectedRows, 1);
   });
 });

@@ -5,7 +5,6 @@
 
 import { HttpError } from '../../../errors.ts';
 import type { FamilyDb, Queryable } from '../db.ts';
-import { type AuditChange, insertAuditLogs } from '../repository/audit-logs.ts';
 import { addressesOf, type AddressRowDb, type MemberRow, type PhoneRowDb, phonesOf } from '../repository/families.ts';
 import { linkedChildIdsOfPerson } from '../repository/legacy.ts';
 import {
@@ -17,6 +16,7 @@ import {
   replacePhones as replacePhoneRows,
   updatePerson as updatePersonRow,
 } from '../repository/people.ts';
+import { type AuditTarget, columnChanges, writeAudit } from './audit.ts';
 import type { Staff } from './auth.ts';
 import { watchLegacy, withMirrorWarning } from './mirror-watch.ts';
 import { preparePhones } from './phones.ts';
@@ -111,16 +111,9 @@ async function loadPerson(db: Queryable, id: number) {
   return personView(person, phones, addresses);
 }
 
-const personAudit = (person: PersonRow, column: string, oldValue: string | null, newValue: string | null) =>
-  ({
-    table: 'people',
-    tableId: person.id,
-    action: 'update',
-    column,
-    oldValue,
-    newValue,
-    entityName: `Person ${personName(person)}`,
-  }) satisfies AuditChange;
+/** The audit target of a people row. */
+export const personTarget = (person: { id: number; fname: string; lname: string; legacy_full_name: string }) =>
+  ({ table: 'people', tableId: person.id, entityName: `Person ${personName(person)}` }) satisfies AuditTarget;
 
 /** The columns PATCH /people/:id may set directly. legacy_full_name is not one of them (below). */
 const EDITABLE = ['fname', 'lname', 'hebrew_name', 'email', 'note', 'occupation', 'employer'] as const;
@@ -172,11 +165,7 @@ export async function updatePerson(db: FamilyDb, staff: Staff, id: number, edit:
       const columns = Object.keys(changes) as (keyof PersonValues)[];
       if (columns.length > 0) {
         await updatePersonRow(conn, id, changes, staff.adminId);
-        await insertAuditLogs(
-          conn,
-          staff.adminId,
-          columns.map((c) => personAudit(before, c, before[c], changes[c] ?? null)),
-        );
+        await writeAudit(conn, staff, columnChanges(personTarget(before), 'update', before, changes));
       }
       return { body: await loadPerson(conn, id), affected: await watch.changed() };
     },
@@ -212,6 +201,10 @@ const phoneList = (
       .sort((a, b) => a.sort_order - b.sort_order || JSON.stringify(a).localeCompare(JSON.stringify(b))),
   );
 
+/** A list replacement is one audit row on the person, the whole list as JSON (docs/CONTEXT.md). */
+const listChange = (person: PersonRow, column: 'phones' | 'addresses', oldList: string, newList: string) =>
+  columnChanges(personTarget(person), 'update', { [column]: oldList }, { [column]: newList });
+
 /** An address list as compared and audited, in stored order (by id = the order sent). */
 const addressList = (addresses: AddressValues[]) =>
   JSON.stringify(
@@ -232,7 +225,7 @@ export async function replacePhones(db: FamilyDb, staff: Staff, id: number, inpu
       if (oldList !== newList) {
         await replacePhoneRows(conn, id, rows);
         await updatePersonRow(conn, id, {}, staff.adminId);
-        await insertAuditLogs(conn, staff.adminId, [personAudit(person, 'phones', oldList, newList)]);
+        await writeAudit(conn, staff, listChange(person, 'phones', oldList, newList));
       }
       return { phones: (await phonesOf(conn, [id])).map(phoneView), affected: await watch.changed() };
     },
@@ -259,7 +252,7 @@ export async function replaceAddresses(db: FamilyDb, staff: Staff, id: number, s
       if (oldList !== newList) {
         await replaceAddressRows(conn, id, input);
         await updatePersonRow(conn, id, {}, staff.adminId);
-        await insertAuditLogs(conn, staff.adminId, [personAudit(person, 'addresses', oldList, newList)]);
+        await writeAudit(conn, staff, listChange(person, 'addresses', oldList, newList));
       }
       return { addresses: (await addressesOf(conn, [id])).map(addressView), affected: await watch.changed() };
     },

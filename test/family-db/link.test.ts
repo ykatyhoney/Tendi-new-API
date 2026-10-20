@@ -172,16 +172,14 @@ describe('PUT /families/:id/children/:childId/rights', () => {
     assert.deepEqual(
       (await audit('family_member_children', aviRow)).map((r) => [r.action, r.col_name, r.new_value, r.user_id]),
       [
-        ['create', 'member_id', String(avi.id), adminId],
-        ['create', 'child_id', String(childId), adminId],
-        ['create', 'is_primary', '0', adminId],
-        ['create', 'receives_notifications', '1', adminId],
-        ['create', 'notify_method', 'both', adminId],
-        ['create', 'may_collect', '0', adminId],
-        ['create', 'collect_from', null, adminId],
-        ['create', 'collect_to', null, adminId],
-        ['create', 'is_emergency', '0', adminId],
-        ['create', 'is_payment_responsible', '0', adminId],
+        ['insert', 'member_id', String(avi.id), adminId],
+        ['insert', 'child_id', String(childId), adminId],
+        ['insert', 'is_primary', '0', adminId],
+        ['insert', 'receives_notifications', '1', adminId],
+        ['insert', 'notify_method', 'both', adminId],
+        ['insert', 'may_collect', '0', adminId],
+        ['insert', 'is_emergency', '0', adminId],
+        ['insert', 'is_payment_responsible', '0', adminId],
       ],
     );
 
@@ -192,13 +190,13 @@ describe('PUT /families/:id/children/:childId/rights', () => {
         { member_id: avi.id, receives_notifications: true, notify_method: 'both' },
       ],
     });
-    assert.equal((await audit('family_member_children', aviRow)).length, 10);
+    assert.equal((await audit('family_member_children', aviRow)).length, 8);
 
     // Avi only, now payment-responsible: Avi's row is updated in place, Sara's deleted.
     const second = await ok('PUT', url, { rights: [{ member_id: avi.id, receives_notifications: true, notify_method: 'both', is_payment_responsible: true }] });
     assert.deepEqual(second.rights.map((r: { id: number }) => r.id), [aviRow]);
     assert.deepEqual(
-      (await audit('family_member_children', aviRow)).slice(10).map((r) => [r.action, r.col_name, r.old_value, r.new_value]),
+      (await audit('family_member_children', aviRow)).slice(8).map((r) => [r.action, r.col_name, r.old_value, r.new_value]),
       [['update', 'is_payment_responsible', '0', '1']],
     );
     assert.deepEqual(

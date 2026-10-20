@@ -107,8 +107,8 @@ describe('POST /families', () => {
     assert.deepEqual(
       audit.map((r) => ({ ...r })),
       [
-        { action: 'create', col_name: 'name', old_value: null, new_value: `${MARK} Katz`, user_id: adminId, actor_type: 'admin' },
-        { action: 'create', col_name: 'household_phone', old_value: null, new_value: '(718) 555-0199', user_id: adminId, actor_type: 'admin' },
+        { action: 'insert', col_name: 'name', old_value: null, new_value: `${MARK} Katz`, user_id: adminId, actor_type: 'admin' },
+        { action: 'insert', col_name: 'household_phone', old_value: null, new_value: '(718) 555-0199', user_id: adminId, actor_type: 'admin' },
       ],
     );
   });

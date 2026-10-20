@@ -6,7 +6,6 @@
 import { HttpError } from '../../../errors.ts';
 import { normalizePhone, phoneDigits } from '../../../lib/phone.ts';
 import type { FamilyDb, Queryable } from '../db.ts';
-import { type AuditChange, insertAuditLogs } from '../repository/audit-logs.ts';
 import {
   addressesOf,
   childrenOfFamilies,
@@ -22,8 +21,16 @@ import {
   searchFamilies as searchFamilyRows,
   updateFamily as updateFamilyRow,
 } from '../repository/families.ts';
+import { type AuditTarget, columnChanges, writeAudit } from './audit.ts';
 import type { Staff } from './auth.ts';
 import { memberView, personName } from './people.ts';
+
+/** The audit target of a families row. */
+export const familyTarget = (id: number, name: string): AuditTarget => ({
+  table: 'families',
+  tableId: id,
+  entityName: `Family ${name}`,
+});
 
 const bool = (v: number) => v === 1;
 
@@ -147,16 +154,7 @@ export async function createFamily(db: FamilyDb, staff: Staff, input: { name: st
   return db.transaction(
     async (conn) => {
       const id = await insertFamily(conn, values, staff.adminId);
-      const changes: AuditChange[] = (['name', 'household_phone'] as const).map((column) => ({
-        table: 'families',
-        tableId: id,
-        action: 'create',
-        column,
-        oldValue: null,
-        newValue: values[column],
-        entityName: `Family ${values.name}`,
-      }));
-      await insertAuditLogs(conn, staff.adminId, changes);
+      await writeAudit(conn, staff, columnChanges(familyTarget(id, values.name), 'insert', null, values));
       return familyDetail(conn, await activeFamily(conn, id));
     },
     { auditUser: staff.adminId },
@@ -176,19 +174,12 @@ export async function updateFamily(
         (column) => input[column] !== undefined && input[column] !== before[column],
       );
       if (changed.length > 0) {
-        await updateFamilyRow(conn, id, Object.fromEntries(changed.map((c) => [c, input[c]])), staff.adminId);
-        await insertAuditLogs(
+        const after = Object.fromEntries(changed.map((c) => [c, input[c]]));
+        await updateFamilyRow(conn, id, after, staff.adminId);
+        await writeAudit(
           conn,
-          staff.adminId,
-          changed.map((column) => ({
-            table: 'families',
-            tableId: id,
-            action: 'update',
-            column,
-            oldValue: before[column],
-            newValue: input[column] ?? null,
-            entityName: `Family ${input.name ?? before.name}`,
-          })),
+          staff,
+          columnChanges(familyTarget(id, input.name ?? before.name), 'update', before, after),
         );
       }
       return familyDetail(conn, await activeFamily(conn, id));

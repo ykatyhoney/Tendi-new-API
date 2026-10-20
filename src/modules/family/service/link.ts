@@ -11,11 +11,11 @@
 
 import { HttpError } from '../../../errors.ts';
 import type { FamilyDb, Queryable } from '../db.ts';
-import { insertAuditLogs } from '../repository/audit-logs.ts';
 import { type ChildRow, findChild, parentSlots, rightsCounts, setChildFamily } from '../repository/children.ts';
 import { type FamilyRow, findFamily } from '../repository/families.ts';
 import { mirroredLegacyValues, PREVIEW_COLUMNS, storedLegacyValues } from '../repository/legacy.ts';
 import type { LINK_WARNING_CODES } from '../schemas/values.ts';
+import { columnChanges, writeAudit } from './audit.ts';
 import type { Staff } from './auth.ts';
 import { conflictsAs409 } from './db-errors.ts';
 import { activeFamily } from './families.ts';
@@ -24,6 +24,15 @@ interface LinkWarning {
   code: (typeof LINK_WARNING_CODES)[number];
   message: string;
 }
+
+/** Link and unlink audit one row each: children.family_id, old and new. */
+const familyIdChange = (child: ChildRow, action: 'link' | 'unlink', familyId: number | null, familyName: string) =>
+  columnChanges(
+    { table: 'children', tableId: child.id, entityName: `Family ${familyName}: child ${child.id}` },
+    action,
+    { family_id: child.family_id },
+    { family_id: familyId },
+  );
 
 /** The child, or 404. `forUpdate` locks the row. */
 export async function existingChild(db: Queryable, childId: number, forUpdate = false): Promise<ChildRow> {
@@ -134,17 +143,7 @@ export async function linkChild(db: FamilyDb, staff: Staff, familyId: number, ch
           );
         }
         await setChildFamily(conn, childId, familyId);
-        await insertAuditLogs(conn, staff.adminId, [
-          {
-            table: 'children',
-            tableId: childId,
-            action: 'link',
-            column: 'family_id',
-            oldValue: child.family_id === null ? null : String(child.family_id),
-            newValue: String(familyId),
-            entityName: `Family ${family.name}: child ${childId}`,
-          },
-        ]);
+        await writeAudit(conn, staff, familyIdChange(child, 'link', familyId, family.name));
         return buildPreview(conn, family, { ...child, family_id: familyId });
       },
       { auditUser: staff.adminId },
@@ -162,17 +161,7 @@ export async function unlinkChild(db: FamilyDb, staff: Staff, childId: number) {
         if (child.family_id === null) throw new HttpError(409, `Child ${childId} is not linked to a family`);
         const family = await findFamily(conn, child.family_id);
         await setChildFamily(conn, childId, null);
-        await insertAuditLogs(conn, staff.adminId, [
-          {
-            table: 'children',
-            tableId: childId,
-            action: 'unlink',
-            column: 'family_id',
-            oldValue: String(child.family_id),
-            newValue: null,
-            entityName: `Family ${family?.name ?? child.family_id}: child ${childId}`,
-          },
-        ]);
+        await writeAudit(conn, staff, familyIdChange(child, 'unlink', null, family?.name ?? String(child.family_id)));
         return { child_id: childId, family_id: null };
       },
       { auditUser: staff.adminId },

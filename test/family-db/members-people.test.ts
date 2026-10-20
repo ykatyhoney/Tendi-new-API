@@ -170,20 +170,20 @@ describe('POST /families/:id/members', () => {
     assert.deepEqual(
       (await audit('people', m.person_id)).map((r) => [r.action, r.col_name, r.new_value]),
       [
-        ['create', 'fname', 'Avi'],
-        ['create', 'lname', `${MARK}ln`],
-        ['create', 'email', 'avi@example.test'],
-        ['create', 'occupation', 'Teacher'],
-        ['create', 'legacy_full_name', `Avi ${MARK}ln`],
+        ['insert', 'fname', 'Avi'],
+        ['insert', 'lname', `${MARK}ln`],
+        ['insert', 'email', 'avi@example.test'],
+        ['insert', 'occupation', 'Teacher'],
+        ['insert', 'legacy_full_name', `Avi ${MARK}ln`],
       ],
     );
     assert.deepEqual(
       (await audit('family_members', m.id)).map((r) => [r.action, r.col_name, r.new_value, r.user_id]),
       [
-        ['create', 'person_id', String(m.person_id), adminId],
-        ['create', 'relationship', 'father', adminId],
-        ['create', 'is_primary', '1', adminId],
-        ['create', 'sort_order', '0', adminId],
+        ['insert', 'person_id', String(m.person_id), adminId],
+        ['insert', 'relationship', 'father', adminId],
+        ['insert', 'is_primary', '1', adminId],
+        ['insert', 'sort_order', '0', adminId],
       ],
     );
   });

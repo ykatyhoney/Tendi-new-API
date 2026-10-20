@@ -1,19 +1,23 @@
-// audit_logs rows for Family API writes (backend CLAUDE.md rule 5), in the shape the PHP app's
-// rows use: one row per changed column (col_name, old_value, new_value), type = the module,
-// action = the verb, table_name / table_id = the row, entity_name = a readable label.
+// SQL for the audit_logs rows of Family API writes. The rules (one row per changed column, the
+// value format) are in service/audit.ts, which every write route goes through.
+// type = 'family_api', actor_type = 'admin', actor_ref = 'family-api', device_id NULL;
 // created_at / updated_at come from the column defaults (the database clock).
 
 import type { Queryable } from '../db.ts';
 
+export type AuditAction = 'insert' | 'update' | 'delete' | 'link' | 'unlink';
+
 export interface AuditChange {
   table: string;
   tableId: number;
-  action: 'create' | 'update' | 'delete' | 'link' | 'unlink';
+  action: AuditAction;
   column: string;
   oldValue: string | null;
   newValue: string | null;
   entityName: string;
 }
+
+export const AUDIT_TYPE = 'family_api';
 
 export async function insertAuditLogs(db: Queryable, adminId: number, changes: AuditChange[]): Promise<void> {
   if (changes.length === 0) return;
@@ -23,7 +27,7 @@ export async function insertAuditLogs(db: Queryable, adminId: number, changes: A
      VALUES ?`,
     [
       changes.map((c) => [
-        'family',
+        AUDIT_TYPE,
         c.table,
         c.action,
         c.column,
