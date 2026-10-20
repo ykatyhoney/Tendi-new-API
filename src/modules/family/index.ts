@@ -12,7 +12,7 @@
 import type { FastifyInstance } from 'fastify';
 import { protectScope } from './auth.ts';
 import { loadFamilyConfig } from './config.ts';
-import { createFamilyDb } from './db.ts';
+import { createFamilyDb, type FamilyDb } from './db.ts';
 import { registerChildrenRoutes } from './routes/children.ts';
 import { registerFamilyRoutes } from './routes/families.ts';
 import { registerHealthRoutes } from './routes/health.ts';
@@ -21,12 +21,19 @@ import { registerStaffRoutes } from './routes/staff.ts';
 
 export { familySchemas } from './schemas/models.ts';
 
-export default async function familyModule(app: FastifyInstance): Promise<void> {
+export interface FamilyModuleOptions {
+  /** Use this database instead of creating the family_api pool (tests); its owner closes it. */
+  db?: FamilyDb;
+}
+
+export default async function familyModule(app: FastifyInstance, options: FamilyModuleOptions = {}): Promise<void> {
   const config = loadFamilyConfig();
-  const db = createFamilyDb(app.config.db, config);
-  app.addHook('onClose', async () => {
-    await db.pool.end();
-  });
+  const db = options.db ?? createFamilyDb(app.config.db, config);
+  if (!options.db) {
+    app.addHook('onClose', async () => {
+      await db.pool.end();
+    });
+  }
 
   registerHealthRoutes(app, db);
 

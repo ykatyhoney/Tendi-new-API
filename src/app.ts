@@ -10,6 +10,7 @@ import type { Pool } from 'mysql2/promise';
 import { type Config, loadConfig } from './config.ts';
 import { createPool } from './db/pool.ts';
 import { ErrorResponse, registerErrorHandling } from './errors.ts';
+import type { FamilyDb } from './modules/family/db.ts';
 import familyModule, { familySchemas } from './modules/family/index.ts';
 import healthModule from './modules/health/index.ts';
 import { connectRedis, type RedisClient } from './redis.ts';
@@ -25,7 +26,15 @@ declare module 'fastify' {
 /** Path of the OpenAPI document served by the running app. */
 export const OPENAPI_JSON_PATH = '/openapi.json';
 
-export async function buildApp(config: Config = loadConfig()) {
+export interface BuildOptions {
+  /**
+   * The family module's database instead of its own family_api pool. For tests that roll each
+   * test back (test/family-api/support/api.ts); the caller owns it and closes it.
+   */
+  familyDb?: FamilyDb;
+}
+
+export async function buildApp(config: Config = loadConfig(), options: BuildOptions = {}) {
   const app = Fastify({
     logger: { level: config.logLevel },
     // Unknown fields fail validation (400) instead of being silently removed.
@@ -69,7 +78,7 @@ export async function buildApp(config: Config = loadConfig()) {
   app.get(OPENAPI_JSON_PATH, { schema: { hide: true } }, async () => app.swagger());
 
   await app.register(healthModule);
-  await app.register(familyModule);
+  await app.register(familyModule, { db: options.familyDb });
 
   return app;
 }

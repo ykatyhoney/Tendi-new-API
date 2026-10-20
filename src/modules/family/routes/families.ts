@@ -162,7 +162,7 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
         summary: "Set every member's rights for one child (notifications, collection, emergency, payment)",
         security,
         description:
-          "Each member_id must be an active member of the family (400 otherwise). Inserts or updates each member's row (uniq_fmc) and deletes the rows of active members not listed. When the child is linked to this family the mirror rewrites its legacy values and the response carries a warning. 404 for an unknown or trashed family or an unknown child.",
+          "Each member_id must be an active member of the family (409 otherwise: another family's member, a removed member or an unknown id). Inserts or updates each member's row (uniq_fmc) and deletes the rows of active members not listed. When the child is linked to this family the mirror rewrites its legacy values and the response carries a warning. 404 for an unknown or trashed family or an unknown child.",
         params: FamilyChildParams,
         body: SetChildRightsBody,
         response: { 200: Type.Ref('ChildRightsResult'), ...errorResponses(...WRITE_ERRORS) },

@@ -217,7 +217,7 @@ describe('PUT /families/:id/children/:childId/rights', () => {
     assert.equal(left.n, 0);
   });
 
-  test("members must be active members of this family (400); a removed member's rows are kept", async () => {
+  test("members must be active members of this family (409); a removed member's rows are kept", async () => {
     const childId = await freeChild();
     const familyId = await family('RightsCheck');
     const other = await family('RightsOther');
@@ -226,14 +226,14 @@ describe('PUT /families/:id/children/:childId/rights', () => {
     const stranger = await member(other, 'Eli', 'father');
     const url = `/families/${familyId}/children/${childId}/rights`;
 
-    const message = await fails('PUT', url, 400, { rights: [{ member_id: avi.id }, { member_id: stranger.id }] });
+    const message = await fails('PUT', url, 409, { rights: [{ member_id: avi.id }, { member_id: stranger.id }] });
     assert.equal(message, `rights/1/member_id: ${stranger.id} is not an active member of family ${familyId}`);
     const [[none]] = await admin.query<RowDataPacket[]>('SELECT COUNT(*) AS n FROM family_member_children WHERE child_id = ? AND member_id = ?', [childId, avi.id]);
     assert.equal(none.n, 0, 'the whole request was rolled back');
 
     await ok('PUT', url, { rights: [{ member_id: avi.id }, { member_id: dov.id, may_collect: true }] });
     await ok('DELETE', `/families/${familyId}/members/${dov.id}`);
-    assert.match(await fails('PUT', url, 400, { rights: [{ member_id: dov.id }] }), /is not an active member/);
+    assert.match(await fails('PUT', url, 409, { rights: [{ member_id: dov.id }] }), /is not an active member/);
 
     const res = await ok('PUT', url, { rights: [{ member_id: avi.id, is_emergency: true }] });
     assert.deepEqual(res.rights.map((r: { member_id: number }) => r.member_id), [avi.id]);

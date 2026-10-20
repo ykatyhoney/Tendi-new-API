@@ -80,7 +80,7 @@ export async function setChildRights(
         rights.forEach((r, i) => {
           if (!members.has(r.member_id)) {
             throw new HttpError(
-              400,
+              409,
               `rights/${i}/member_id: ${r.member_id} is not an active member of family ${familyId}`,
             );
           }
