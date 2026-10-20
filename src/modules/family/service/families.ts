@@ -22,10 +22,9 @@ import {
   updateFamily as updateFamilyRow,
 } from '../repository/families.ts';
 import type { Staff } from './auth.ts';
+import { memberView, personName } from './people.ts';
 
 const bool = (v: number) => v === 1;
-const personName = (m: { fname: string; lname: string; legacy_full_name: string }) =>
-  `${m.fname} ${m.lname}`.trim() || m.legacy_full_name;
 
 const childFields = (c: FamilyChildRow) => ({
   id: c.id,
@@ -106,51 +105,7 @@ export async function familyDetail(db: Queryable, family: FamilyRow) {
     status: family.status,
     created_at: family.created_at,
     updated_at: family.updated_at,
-    members: members.map((m) => ({
-      id: m.id,
-      family_id: m.family_id,
-      person_id: m.person_id,
-      relationship: m.relationship,
-      is_primary: bool(m.is_primary),
-      sort_order: m.sort_order,
-      status: m.status,
-      person: {
-        id: m.person_id,
-        fname: m.fname,
-        lname: m.lname,
-        legacy_full_name: m.legacy_full_name,
-        hebrew_name: m.hebrew_name,
-        email: m.email,
-        note: m.note,
-        occupation: m.occupation,
-        employer: m.employer,
-        status: m.person_status,
-        created_at: m.person_created_at,
-        updated_at: m.person_updated_at,
-        phones: phones
-          .filter((p) => p.person_id === m.person_id)
-          .map((p) => ({
-            id: p.id,
-            phone: p.phone,
-            phone_normalized: p.phone_normalized,
-            label: p.label,
-            channel: p.channel,
-            is_primary: bool(p.is_primary),
-            sort_order: p.sort_order,
-          })),
-        addresses: addresses
-          .filter((a) => a.person_id === m.person_id)
-          .map((a) => ({
-            id: a.id,
-            kind: a.kind,
-            line1: a.line1,
-            line2: a.line2,
-            city: a.city,
-            state: a.state,
-            zip: a.zip,
-          })),
-      },
-    })),
+    members: members.map((m) => memberView(m, phones, addresses)),
     children: children.map((c) => ({
       ...childFields(c),
       rights: rights
@@ -175,7 +130,7 @@ export async function familyDetail(db: Queryable, family: FamilyRow) {
 const notFound = (id: number) => new HttpError(404, `Family ${id} not found`);
 
 /** An active family, or 404 (unknown and trashed families are both "not found"). */
-async function activeFamily(db: Queryable, id: number, forUpdate = false): Promise<FamilyRow> {
+export async function activeFamily(db: Queryable, id: number, forUpdate = false): Promise<FamilyRow> {
   const family = await findFamily(db, id, forUpdate);
   if (!family || family.status !== 'active') throw notFound(id);
   return family;

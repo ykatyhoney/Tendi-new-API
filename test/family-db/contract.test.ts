@@ -1,6 +1,7 @@
 // The Family API business-rule checks are wired into the routes and run after the staff auth:
-// a valid token gets 400 for a rule violation and 501 (not implemented yet) for a valid request;
-// a refused staff type gets 403 before any rule is checked. Against tendi_family_test.
+// a valid token gets 400 for a rule violation; a valid request reaches the handler (here on ids that
+// do not exist, so it answers 404 and writes nothing); a refused staff type gets 403 before any
+// rule is checked. Against tendi_family_test.
 
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
@@ -42,11 +43,13 @@ after(async () => {
   await admin.end();
 });
 
+const NO_ID = 2147483647; // no row has this id
+
 const call = (method: 'POST' | 'PUT' | 'PATCH', url: string, payload: object, as = token.staff) =>
   app.inject({ method, url, payload, headers: { authorization: `Bearer ${as}` } });
 
 describe('family API rules through the routes', () => {
-  test('phones: two primaries -> 400; one primary -> passes the checks (501 until implemented)', async () => {
+  test('phones: two primaries -> 400; one primary -> passes the checks (404: no such person)', async () => {
     const bad = await call('PUT', '/people/1/phones', {
       phones: [
         { phone: '718-555-0101', label: 'mobile', is_primary: true },
@@ -60,9 +63,11 @@ describe('family API rules through the routes', () => {
       message: 'phones: exactly one phone must have is_primary = true (found 2)',
     });
 
-    const ok = await call('PUT', '/people/1/phones', { phones: [{ phone: '718-555-0101', label: 'mobile', is_primary: true }] });
-    assert.equal(ok.statusCode, 501);
-    assert.equal(ok.json().message, 'replacePersonPhones is not implemented yet');
+    const ok = await call('PUT', `/people/${NO_ID}/phones`, {
+      phones: [{ phone: '718-555-0101', label: 'mobile', is_primary: true }],
+    });
+    assert.equal(ok.statusCode, 404);
+    assert.equal(ok.json().message, `Person ${NO_ID} not found`);
   });
 
   test('rights: collect_to before collect_from -> 400', async () => {
@@ -127,20 +132,22 @@ describe('family API rules through the routes', () => {
     assert.match(query.json().message, /additional properties/);
   });
 
-  test('mirror limits: household_phone over 30 characters, default legacy name over 100', async () => {
+  test('mirror limits: household_phone over 30 characters, legacy name ("fname lname") over 100', async () => {
     await invalid('POST', '/families', { name: 'Katz', household_phone: '718-555-0101 ext 4455 evenings' + 'x' }, /household_phone.*30/);
     await invalid('PATCH', '/families/1', { household_phone: 'x'.repeat(31) }, /household_phone/);
     await invalid(
       'POST',
       '/families/1/members',
       { person: { fname: 'a'.repeat(60), lname: 'b'.repeat(60) }, relationship: 'father' },
-      /legacy_full_name defaults to "fname lname"/,
+      /legacy_full_name is set to "fname lname"/,
     );
-    const ok = await call('POST', '/families/1/members', {
-      person: { fname: 'a'.repeat(60), lname: 'b'.repeat(60), legacy_full_name: 'A B' },
-      relationship: 'father',
-    });
-    assert.equal(ok.statusCode, 501, 'an explicit legacy_full_name lifts the limit');
+    await invalid(
+      'POST',
+      '/families/1/members',
+      { person: { fname: 'A', lname: 'B', legacy_full_name: 'A B' }, relationship: 'father' },
+      /additional properties/,
+    );
+    await invalid('PATCH', '/people/1', { legacy_full_name: 'A B' }, /additional properties/);
   });
 
   test('a refused staff type gets 403 before any rule is checked', async () => {

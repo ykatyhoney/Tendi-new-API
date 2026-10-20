@@ -7,8 +7,9 @@
 // which would fail the whole write. Audit of all 28 (legacy max vs longest value the API inputs
 // can produce):
 //
-//   children.father_name / mother_name   100  <- people.legacy_full_name verbatim       100  ok,
-//        but a new person's default "fname lname" can reach 201 -> limited to 100 (checkAddMember)
+//   children.father_name / mother_name   100  <- people.legacy_full_name verbatim, which the API
+//        only ever sets to "fname lname" (up to 201) -> limited to 100 (checkAddMember; the
+//        reset_legacy_full_name check in service/people.ts)
 //   children.father_phone / mother_phone 255  <- primary phone                          255  ok
 //   children.home_phone                  255  <- families.household_phone               255  ok
 //   children.parent_email                255  <- people.email                           255  ok
@@ -106,11 +107,10 @@ export function checkEmail(email: string | undefined): void {
 interface NewPersonLike {
   fname?: string;
   lname?: string;
-  legacy_full_name?: string;
   email?: string;
 }
 
-/** A new person's legacy name when none is given: "fname lname" (people.legacy_full_name). */
+/** The legacy name the API sets: "fname lname" (people.legacy_full_name). */
 export function defaultLegacyName(person: NewPersonLike): string {
   return [person.fname ?? '', person.lname ?? '']
     .map((s) => s.trim())
@@ -126,9 +126,9 @@ export function checkAddMember(body: { person_id?: number; person?: NewPersonLik
   const person = body.person;
   if (!person) return;
   checkEmail(person.email);
-  if (person.legacy_full_name === undefined && charLength(defaultLegacyName(person)) > MIRROR_NAME_MAX) {
+  if (charLength(defaultLegacyName(person)) > MIRROR_NAME_MAX) {
     fail(
-      `person: legacy_full_name defaults to "fname lname", which is mirrored to a varchar(${MIRROR_NAME_MAX}) legacy name; send a legacy_full_name of at most ${MIRROR_NAME_MAX} characters`,
+      `person: legacy_full_name is set to "fname lname", which is mirrored to a varchar(${MIRROR_NAME_MAX}) legacy name; "fname lname" may have at most ${MIRROR_NAME_MAX} characters`,
     );
   }
 }
