@@ -24,6 +24,7 @@ const ROUTES: [Method, string, object?][] = [
   ['PUT', `/families/${NO_ID}/children/${NO_ID}/rights`, { rights: [] }],
   ['GET', `/families/${NO_ID}/children/${NO_ID}/preview`],
   ['POST', `/families/${NO_ID}/children/${NO_ID}/link`],
+  ['GET', '/children?q=Katz'],
   ['POST', `/children/${NO_ID}/unlink`],
   ['GET', '/staff/me'],
 ];

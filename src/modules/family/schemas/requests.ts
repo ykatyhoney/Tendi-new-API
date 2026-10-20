@@ -37,6 +37,20 @@ export const SearchFamiliesQuery = Type.Object(
   { additionalProperties: false },
 );
 
+export const SearchChildrenQuery = Type.Object(
+  {
+    q: Type.String({
+      minLength: 1,
+      maxLength: 100,
+      description:
+        'Digits only: the child with that id. Otherwise a name of at least 2 characters other than surrounding spaces, matched anywhere in the first name, the last name, or "first last" / "last first", ignoring case',
+    }),
+    page: withDefault(Type.Integer({ minimum: 1 }), 1),
+    pageSize: withDefault(Type.Integer({ minimum: 1, maximum: 100 }), 20),
+  },
+  { additionalProperties: false },
+);
+
 // --- Families -------------------------------------------------------------------------------------
 
 export const CreateFamilyBody = body({

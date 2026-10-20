@@ -16,7 +16,7 @@ export interface FamilyRow {
 const FAMILY_COLUMNS = 'f.id, f.name, f.household_phone, f.status, f.created_at, f.updated_at';
 
 /** `text` for a LIKE pattern, with % _ and \ matching literally. */
-const likeEscape = (text: string) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
+export const likeEscape = (text: string) => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** What GET /families searches for (built by service/families.ts from `q`). */
 export type FamilySearch =

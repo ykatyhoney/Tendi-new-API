@@ -31,6 +31,7 @@ const EXPECTED_OPERATIONS = {
   'PUT /families/{id}/children/{childId}/rights': 'setChildRights',
   'GET /families/{id}/children/{childId}/preview': 'previewChildLink',
   'POST /families/{id}/children/{childId}/link': 'linkChild',
+  'GET /children': 'searchChildren',
   'POST /children/{childId}/unlink': 'unlinkChild',
   'GET /staff/me': 'getCurrentStaff',
   'GET /health/family': 'getFamilyHealth',

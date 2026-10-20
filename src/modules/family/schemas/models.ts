@@ -275,6 +275,34 @@ export const LinkPreview = Type.Object(
   { $id: 'LinkPreview' },
 );
 
+export const ChildSummary = Type.Object(
+  {
+    id: Id,
+    fname: Text(25),
+    lname: Text(25),
+    status: Type.Union([Type.Literal('active'), Type.Literal('inactive')], { description: 'children.status' }),
+    class_id: Type.Integer({ description: 'children.class (0 = none)' }),
+    class_name: Type.Union([Type.String({ maxLength: 50 }), Type.Null()], {
+      description: 'classes.name; null when children.class has no classes row',
+    }),
+    family_id: Type.Union([Id, Type.Null()], {
+      description: 'children.family_id: the family it is linked to, or null',
+    }),
+    family_name: Type.Union([Text(100), Type.Null()], { description: 'That family’s name; null when not linked' }),
+  },
+  { $id: 'ChildSummary' },
+);
+
+export const ChildSearchResult = Type.Object(
+  {
+    items: Type.Array(Type.Ref('ChildSummary')),
+    total: Type.Integer({ minimum: 0, description: 'Matching children, all pages' }),
+    page: Type.Integer({ minimum: 1 }),
+    page_size: Type.Integer({ minimum: 1 }),
+  },
+  { $id: 'ChildSearchResult' },
+);
+
 export const LinkResult = Type.Object(
   { child_id: Id, family_id: Type.Union([Id, Type.Null()]) },
   { $id: 'LinkResult', description: 'children.family_id after the change (null = unlinked)' },
@@ -311,6 +339,8 @@ export const familySchemas = [
   LegacyColumnPreview,
   LinkWarning,
   LinkPreview,
+  ChildSummary,
+  ChildSearchResult,
   LinkResult,
   StaffMember,
 ];

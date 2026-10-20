@@ -20,6 +20,79 @@ async function familyIdOf(childId: number) {
   return row;
 }
 
+describe('GET /children', () => {
+  async function child(id: number) {
+    const [[row]] = await api
+      .db()
+      .query<RowDataPacket[]>('SELECT id, fname, lname, status FROM children WHERE id = ?', [id]);
+    return row;
+  }
+  const ids = (result: { items: { id: number }[] }) => result.items.map((c) => c.id);
+
+  test('by first name, last name, "first last" and exact id; with the class and no family when unlinked', async () => {
+    const [id] = await freeChildren(api, 1);
+    const c = await child(id);
+    for (const q of [c.fname, c.lname, `${c.fname} ${c.lname}`, `${c.lname} ${c.fname}`, String(id)]) {
+      const result = await api.ok('GET', `/children?q=${encodeURIComponent(q)}&pageSize=100`);
+      assert.ok(ids(result).includes(id), `q=${q}`);
+    }
+    const byId = await api.ok('GET', `/children?q=${id}`);
+    assert.equal(byId.total, 1);
+    assert.deepEqual(
+      { ...byId.items[0], class_id: undefined, class_name: undefined },
+      {
+        id,
+        fname: c.fname,
+        lname: c.lname,
+        status: 'active',
+        class_id: undefined,
+        class_name: undefined,
+        family_id: null,
+        family_name: null,
+      },
+    );
+  });
+
+  test('a linked child shows its family; a trashed child is not found; active children come first', async () => {
+    const [id] = await freeChildren(api, 1);
+    const { familyId } = await readyFamily(api, 'SearchLinked', [id]);
+    await api.ok('POST', `/families/${familyId}/children/${id}/link`);
+    const linked = await api.ok('GET', `/children?q=${id}`);
+    assert.deepEqual([linked.items[0].family_id, linked.items[0].family_name], [familyId, 'SearchLinked']);
+
+    const [[inactive]] = await api
+      .db()
+      .query<RowDataPacket[]>("SELECT id, lname FROM children WHERE status = 'inactive' ORDER BY id LIMIT 1");
+    assert.equal((await api.ok('GET', `/children?q=${inactive.id}`)).items[0].status, 'inactive');
+    const [[trashed]] = await api.db().query<RowDataPacket[]>("SELECT id FROM children WHERE status = 'trash' LIMIT 1");
+    assert.equal((await api.ok('GET', `/children?q=${trashed.id}`)).total, 0);
+
+    const all = await api.ok('GET', '/children?q=an&pageSize=100');
+    const statuses = all.items.map((c: { status: string }) => c.status);
+    assert.deepEqual(
+      statuses,
+      [...statuses].sort((a: string, b: string) => (a === b ? 0 : a === 'active' ? -1 : 1)),
+    );
+  });
+
+  test('paging; no match is an empty page', async () => {
+    const page1 = await api.ok('GET', '/children?q=an&page=1&pageSize=2');
+    const page2 = await api.ok('GET', '/children?q=an&page=2&pageSize=2');
+    assert.equal(page1.items.length, 2);
+    assert.equal(page1.total, page2.total);
+    assert.notDeepEqual(ids(page1), ids(page2));
+    assert.deepEqual(await api.ok('GET', '/children?q=zzqqxx'), { items: [], total: 0, page: 1, page_size: 20 });
+  });
+
+  test('400: q missing or shorter than 2 characters, pageSize over 100, an unknown parameter', async () => {
+    assert.equal((await api.request('GET', '/children')).statusCode, 400);
+    assert.match(await api.fails('GET', '/children?q=%20a%20', 400), /at least 2 characters/);
+    assert.equal((await api.request('GET', '/children?q=1')).statusCode, 200, 'a one-digit id is fine');
+    assert.equal((await api.request('GET', '/children?q=an&pageSize=101')).statusCode, 400);
+    assert.match(await api.fails('GET', '/children?q=an&family=1', 400), /additional properties/);
+  });
+});
+
 describe('PUT /families/:id/children/:childId/rights', () => {
   test('200 with the rows; the same member updated in place, an unlisted one deleted', async () => {
     const [childId] = await freeChildren(api, 1);

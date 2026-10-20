@@ -3,6 +3,7 @@
 
 import type { RowDataPacket } from 'mysql2/promise';
 import type { Queryable } from '../db.ts';
+import { likeEscape } from './families.ts';
 
 export interface ChildRow {
   id: number;
@@ -77,4 +78,57 @@ export async function rightsCounts(
     [familyId, childId],
   );
   return { rights: Number(row.rights), payment_responsible: Number(row.payment_responsible) };
+}
+
+export interface ChildSummaryRow {
+  id: number;
+  fname: string;
+  lname: string;
+  status: 'active' | 'inactive';
+  class_id: number;
+  class_name: string | null;
+  family_id: number | null;
+  family_name: string | null;
+}
+
+/** What GET /children searches for (built by service/children.ts from `q`). */
+export type ChildSearch = { id: number } | { name: string };
+
+/**
+ * Children that are not trashed, matching an exact id or a name anywhere in fname, lname,
+ * "fname lname" or "lname fname" (a scan: 753 rows in the 2026-09-24 dump). Active first, then
+ * by last name, first name and id. family_name is the linked family's name, whatever its status.
+ */
+export async function searchChildren(
+  db: Queryable,
+  search: ChildSearch,
+  limit: number,
+  offset: number,
+): Promise<{ rows: ChildSummaryRow[]; total: number }> {
+  let where: string;
+  let params: unknown[];
+  if ('id' in search) {
+    where = 'c.id = ?';
+    params = [search.id];
+  } else {
+    const like = `%${likeEscape(search.name)}%`;
+    where = `(c.fname LIKE ? OR c.lname LIKE ? OR CONCAT(c.fname, ' ', c.lname) LIKE ? OR CONCAT(c.lname, ' ', c.fname) LIKE ?)`;
+    params = [like, like, like, like];
+  }
+  const [[count]] = await db.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM children c WHERE c.status <> 'trash' AND ${where}`,
+    params,
+  );
+  const [rows] = await db.query<RowDataPacket[]>(
+    `SELECT c.id, c.fname, c.lname, c.status, c.class AS class_id, cl.name AS class_name,
+            c.family_id, f.name AS family_name
+       FROM children c
+       LEFT JOIN classes cl ON cl.id = c.class
+       LEFT JOIN families f ON f.id = c.family_id
+      WHERE c.status <> 'trash' AND ${where}
+      ORDER BY c.status = 'active' DESC, c.lname, c.fname, c.id
+      LIMIT ? OFFSET ?`,
+    [...params, limit, offset],
+  );
+  return { rows: rows as ChildSummaryRow[], total: Number(count.total) };
 }

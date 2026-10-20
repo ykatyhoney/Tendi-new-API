@@ -1241,6 +1241,122 @@
           }
         }
       },
+      "ChildSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "status",
+          "class_id",
+          "class_name",
+          "family_id",
+          "family_name"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "fname": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "lname": {
+            "type": "string",
+            "maxLength": 25
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "inactive"
+                ]
+              }
+            ],
+            "description": "children.status"
+          },
+          "class_id": {
+            "type": "integer",
+            "description": "children.class (0 = none)"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "classes.name; null when children.class has no classes row"
+          },
+          "family_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "children.family_id: the family it is linked to, or null"
+          },
+          "family_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "That family’s name; null when not linked"
+          }
+        }
+      },
+      "ChildSearchResult": {
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChildSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Matching children, all pages"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
       "LinkResult": {
         "type": "object",
         "required": [
@@ -3258,6 +3374,97 @@
           },
           "404": {
             "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/children": {
+      "get": {
+        "operationId": "searchChildren",
+        "summary": "Search children by name or id, with the family each is linked to",
+        "tags": [
+          "family"
+        ],
+        "description": "Children that are not trashed (active first). family_id / family_name say whether the child is already linked, and to which family.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "description": "Digits only: the child with that id. Otherwise a name of at least 2 characters other than surrounding spaces, matched anywhere in the first name, the last name, or \"first last\" / \"last first\", ignoring case"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": false
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChildSearchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (schema or business rule)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
             "content": {
               "application/json": {
                 "schema": {

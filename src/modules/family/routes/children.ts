@@ -1,15 +1,34 @@
-// /children routes (PLAN.md "Family API"), implemented in step 3.6.
+// /children routes (PLAN.md "Family API"), implemented in step 3.6. GET /children (search) was
+// added on 2026-10-20 for the Link child screen (it is not in PLAN.md's table).
 
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import type { FastifyInstance } from 'fastify';
 import type { FamilyDb } from '../db.ts';
-import { ChildParams } from '../schemas/requests.ts';
+import { ChildParams, SearchChildrenQuery } from '../schemas/requests.ts';
+import { searchChildren } from '../service/children.ts';
 import { unlinkChild } from '../service/link.ts';
 import { FAMILY_TAG, WRITE_ERRORS, errorResponses } from './common.ts';
 
 export function registerChildrenRoutes(scope: FastifyInstance, db: FamilyDb): void {
   const app = scope.withTypeProvider<TypeBoxTypeProvider>();
+
+  app.get(
+    '/children',
+    {
+      schema: {
+        operationId: 'searchChildren',
+        tags: [FAMILY_TAG],
+        summary: 'Search children by name or id, with the family each is linked to',
+        description:
+          'Children that are not trashed (active first). family_id / family_name say whether the child is already linked, and to which family.',
+        security: [{ bearerAuth: [] }],
+        querystring: SearchChildrenQuery,
+        response: { 200: Type.Ref('ChildSearchResult'), ...errorResponses(400, 401, 403) },
+      },
+    },
+    async (request) => searchChildren(db, request.query),
+  );
 
   app.post(
     '/children/:childId/unlink',
