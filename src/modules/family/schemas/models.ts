@@ -93,14 +93,26 @@ export const ChildRight = Type.Object(
   { $id: 'ChildRight' },
 );
 
-export const LinkedChild = Type.Object(
+const familyChildFields = {
+  id: Id,
+  fname: Text(25),
+  lname: Text(25),
+  class_id: Type.Integer({ description: 'children.class (0 = none)' }),
+  class_name: Type.Union([Type.String({ maxLength: 50 }), Type.Null()], {
+    description: 'classes.name; null when children.class has no classes row',
+  }),
+  linked: Type.Boolean({
+    description:
+      'children.family_id is this family (otherwise the child only has rights rows here, as a backfill draft)',
+  }),
+};
+
+export const FamilyChild = Type.Object(
   {
-    id: Id,
-    fname: Text(25),
-    lname: Text(25),
-    rights: Type.Array(Type.Ref('ChildRight')),
+    ...familyChildFields,
+    rights: Type.Array(Type.Ref('ChildRight'), { description: "Rights rows of this family's members for the child" }),
   },
-  { $id: 'LinkedChild', description: 'A child with children.family_id = this family' },
+  { $id: 'FamilyChild', description: 'A child linked to the family, or with rights rows of its members' },
 );
 
 export const Family = Type.Object(
@@ -111,8 +123,8 @@ export const Family = Type.Object(
     status: RecordStatus,
     created_at: DateTime,
     updated_at: DateTime,
-    members: Type.Array(Type.Ref('FamilyMember')),
-    children: Type.Array(Type.Ref('LinkedChild')),
+    members: Type.Array(Type.Ref('FamilyMember'), { description: 'Active members, by sort_order' }),
+    children: Type.Array(Type.Ref('FamilyChild')),
   },
   { $id: 'Family' },
 );
@@ -125,14 +137,24 @@ export const FamilySummary = Type.Object(
     status: RecordStatus,
     members: Type.Array(
       Type.Object({ person_id: Id, name: Text(201), relationship: Relationship, is_primary: Type.Boolean() }),
+      { description: 'Active members, by sort_order' },
     ),
-    children: Type.Array(Type.Object({ id: Id, fname: Text(25), lname: Text(25) })),
+    children: Type.Array(Type.Object(familyChildFields), {
+      description: 'Linked children, then children with rights rows of its members (linked: false), as in Family',
+    }),
+    member_count: Type.Integer({ minimum: 0 }),
+    child_count: Type.Integer({ minimum: 0, description: 'Children listed in children, linked or not' }),
   },
   { $id: 'FamilySummary' },
 );
 
 export const FamilySearchResult = Type.Object(
-  { items: Type.Array(Type.Ref('FamilySummary')), total: Type.Integer({ minimum: 0 }) },
+  {
+    items: Type.Array(Type.Ref('FamilySummary')),
+    total: Type.Integer({ minimum: 0, description: 'Matching families, all pages' }),
+    page: Type.Integer({ minimum: 1 }),
+    page_size: Type.Integer({ minimum: 1 }),
+  },
   { $id: 'FamilySearchResult' },
 );
 
@@ -213,7 +235,7 @@ export const familySchemas = [
   Person,
   FamilyMember,
   ChildRight,
-  LinkedChild,
+  FamilyChild,
   Family,
   FamilySummary,
   FamilySearchResult,

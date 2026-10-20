@@ -386,12 +386,15 @@
           }
         }
       },
-      "LinkedChild": {
+      "FamilyChild": {
         "type": "object",
         "required": [
           "id",
           "fname",
           "lname",
+          "class_id",
+          "class_name",
+          "linked",
           "rights"
         ],
         "properties": {
@@ -408,14 +411,35 @@
             "type": "string",
             "maxLength": 25
           },
+          "class_id": {
+            "type": "integer",
+            "description": "children.class (0 = none)"
+          },
+          "class_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "classes.name; null when children.class has no classes row"
+          },
+          "linked": {
+            "type": "boolean",
+            "description": "children.family_id is this family (otherwise the child only has rights rows here, as a backfill draft)"
+          },
           "rights": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ChildRight"
-            }
+            },
+            "description": "Rights rows of this family's members for the child"
           }
         },
-        "description": "A child with children.family_id = this family"
+        "description": "A child linked to the family, or with rights rows of its members"
       },
       "Family": {
         "type": "object",
@@ -465,12 +489,13 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/FamilyMember"
-            }
+            },
+            "description": "Active members, by sort_order"
           },
           "children": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/LinkedChild"
+              "$ref": "#/components/schemas/FamilyChild"
             }
           }
         }
@@ -483,7 +508,9 @@
           "household_phone",
           "status",
           "members",
-          "children"
+          "children",
+          "member_count",
+          "child_count"
         ],
         "properties": {
           "id": {
@@ -558,7 +585,8 @@
                   "type": "boolean"
                 }
               }
-            }
+            },
+            "description": "Active members, by sort_order"
           },
           "children": {
             "type": "array",
@@ -567,7 +595,10 @@
               "required": [
                 "id",
                 "fname",
-                "lname"
+                "lname",
+                "class_id",
+                "class_name",
+                "linked"
               ],
               "properties": {
                 "id": {
@@ -582,9 +613,39 @@
                 "lname": {
                   "type": "string",
                   "maxLength": 25
+                },
+                "class_id": {
+                  "type": "integer",
+                  "description": "children.class (0 = none)"
+                },
+                "class_name": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "maxLength": 50
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "classes.name; null when children.class has no classes row"
+                },
+                "linked": {
+                  "type": "boolean",
+                  "description": "children.family_id is this family (otherwise the child only has rights rows here, as a backfill draft)"
                 }
               }
-            }
+            },
+            "description": "Linked children, then children with rights rows of its members (linked: false), as in Family"
+          },
+          "member_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "child_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Children listed in children, linked or not"
           }
         }
       },
@@ -592,7 +653,9 @@
         "type": "object",
         "required": [
           "items",
-          "total"
+          "total",
+          "page",
+          "page_size"
         ],
         "properties": {
           "items": {
@@ -603,7 +666,16 @@
           },
           "total": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Matching families, all pages"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       },
@@ -1340,13 +1412,23 @@
           {
             "schema": {
               "type": "string",
-              "minLength": 1,
+              "minLength": 2,
               "maxLength": 255
             },
             "in": "query",
             "name": "q",
             "required": false,
-            "description": "Family name, person name, or any phone (matched on phone_normalized)"
+            "description": "At least 2 characters other than surrounding spaces. A phone with 10 digits matches people_phones.phone_normalized or families.household_phone_normalized exactly; 4-9 digits match the end of either. Anything else matches anywhere in the family name or in a member’s fname, lname or legacy_full_name, ignoring case"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": false
           },
           {
             "schema": {
@@ -1356,17 +1438,7 @@
               "default": 25
             },
             "in": "query",
-            "name": "limit",
-            "required": false
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0
-            },
-            "in": "query",
-            "name": "offset",
+            "name": "pageSize",
             "required": false
           }
         ],
@@ -1408,16 +1480,6 @@
           },
           "403": {
             "description": "Staff type not allowed to use the Family API",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1506,26 +1568,6 @@
                 }
               }
             }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
@@ -1533,7 +1575,7 @@
     "/families/{id}": {
       "get": {
         "operationId": "getFamily",
-        "summary": "Household with members, phones, addresses, linked children and their rights",
+        "summary": "Household with members, phones, addresses, children (linked or with rights rows) and their rights",
         "tags": [
           "family"
         ],
@@ -1597,16 +1639,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1707,26 +1739,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {

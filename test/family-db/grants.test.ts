@@ -39,6 +39,7 @@ describe('family_api grants', () => {
       .map((r) => String(Object.values(r)[0]))
       .filter((g) => g.includes(`\`${database}\``))
       .map((g) => g.replace(/ TO .*$/, '').replace(`\`${database}\`.`, ''))
+      .map((g) => g.replace(/\(([^)]*)\)/g, (_, columns: string) => `(${columns.split(', ').sort().join(', ')})`))
       .sort();
     const family = ['families', 'people', 'family_members', 'people_phones', 'people_addresses', 'family_member_children'];
     assert.deepEqual(
@@ -49,6 +50,7 @@ describe('family_api grants', () => {
         'GRANT SELECT, UPDATE (`last_seen_at`) ON `admin_api_tokens`',
         'GRANT SELECT ON `children_additional_information`',
         'GRANT SELECT, UPDATE (`family_id`) ON `children`',
+        'GRANT SELECT (`id`, `name`) ON `classes`',
         'GRANT INSERT ON `audit_logs`',
         'GRANT EXECUTE ON PROCEDURE `sp_family_preview`',
       ].sort(),
@@ -69,6 +71,7 @@ describe('family_api grants', () => {
     await denied('CALL sp_family_mirror_values(?, NULL, @a,@b,@c,@d,@e,@f,@g,@h,@i,@j,@k,@l,@m,@n,@o,@p,@q,@r,@s,@t,@u,@v,@w,@x,@y,@z,@aa,@bb)', 1370, [child]);
     await denied('DELETE FROM audit_logs WHERE id = 0', 1142);
     await denied('SELECT COUNT(*) FROM family_reconcile_runs', 1142);
+    await denied('SELECT phone_number FROM classes LIMIT 1', 1143);
   });
 
   test('can still link a child: the mirror (run as its definer) fills the legacy columns', async () => {

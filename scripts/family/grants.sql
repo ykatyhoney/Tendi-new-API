@@ -33,6 +33,8 @@ GRANT SELECT ON children                        TO 'family_api'@'localhost';
 GRANT SELECT ON children_additional_information TO 'family_api'@'localhost';
 GRANT SELECT ON admin                           TO 'family_api'@'localhost';
 GRANT SELECT ON admin_api_tokens                TO 'family_api'@'localhost';
+-- The class name shown for each child (GET /families, GET /families/:id); no other classes column
+GRANT SELECT (id, name) ON classes TO 'family_api'@'localhost';
 
 -- Writes to the 6 family tables (the triggers on them run as their definer and do the mirroring)
 GRANT INSERT, UPDATE, DELETE ON families               TO 'family_api'@'localhost';

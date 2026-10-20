@@ -33,7 +33,7 @@ export default async function familyModule(app: FastifyInstance): Promise<void> 
   await app.register(async (api) => {
     protectScope(api, db, config.allowedStaffTypes);
     registerStaffRoutes(api);
-    registerFamilyRoutes(api);
+    registerFamilyRoutes(api, db);
     registerPeopleRoutes(api);
     registerChildrenRoutes(api);
   });

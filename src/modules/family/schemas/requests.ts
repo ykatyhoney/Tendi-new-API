@@ -25,13 +25,14 @@ export const SearchFamiliesQuery = Type.Object(
   {
     q: Type.Optional(
       Type.String({
-        minLength: 1,
+        minLength: 2,
         maxLength: 255,
-        description: 'Family name, person name, or any phone (matched on phone_normalized)',
+        description:
+          'At least 2 characters other than surrounding spaces. A phone with 10 digits matches people_phones.phone_normalized or families.household_phone_normalized exactly; 4-9 digits match the end of either. Anything else matches anywhere in the family name or in a member’s fname, lname or legacy_full_name, ignoring case',
       }),
     ),
-    limit: withDefault(Type.Integer({ minimum: 1, maximum: 100 }), 25),
-    offset: withDefault(Type.Integer({ minimum: 0 }), 0),
+    page: withDefault(Type.Integer({ minimum: 1 }), 1),
+    pageSize: withDefault(Type.Integer({ minimum: 1, maximum: 100 }), 25),
   },
   { additionalProperties: false },
 );

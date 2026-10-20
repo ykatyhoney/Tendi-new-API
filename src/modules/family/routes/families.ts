@@ -1,4 +1,5 @@
-// /families routes (PLAN.md "Family API"). Contracts are final; handlers arrive in later steps.
+// /families routes (PLAN.md "Family API"). Search, detail, create and edit are implemented (step 3.4);
+// the others answer 501 until their step.
 
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
@@ -14,12 +15,14 @@ import {
   UpdateFamilyBody,
   UpdateMemberBody,
 } from '../schemas/requests.ts';
+import type { FamilyDb } from '../db.ts';
+import { createFamily, getFamily, searchFamilies, updateFamily } from '../service/families.ts';
 import { checkAddMember, checkHouseholdPhone, checkRights } from '../service/validation.ts';
 import { FAMILY_TAG, READ_ERRORS, WRITE_ERRORS, errorResponses, notImplemented } from './common.ts';
 
 const security = [{ bearerAuth: [] }];
 
-export function registerFamilyRoutes(scope: FastifyInstance): void {
+export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void {
   const app = scope.withTypeProvider<TypeBoxTypeProvider>();
 
   app.get(
@@ -31,10 +34,10 @@ export function registerFamilyRoutes(scope: FastifyInstance): void {
         summary: 'Search families by family name, person name or phone (phone_normalized)',
         security,
         querystring: SearchFamiliesQuery,
-        response: { 200: Type.Ref('FamilySearchResult'), ...errorResponses(400, 401, 403, 501) },
+        response: { 200: Type.Ref('FamilySearchResult'), ...errorResponses(400, 401, 403) },
       },
     },
-    notImplemented('searchFamilies'),
+    async (request) => searchFamilies(db, request.query),
   );
 
   app.post(
@@ -46,11 +49,11 @@ export function registerFamilyRoutes(scope: FastifyInstance): void {
         summary: 'Create a household',
         security,
         body: CreateFamilyBody,
-        response: { 201: Type.Ref('Family'), ...errorResponses(400, 401, 403, 409, 501) },
+        response: { 201: Type.Ref('Family'), ...errorResponses(400, 401, 403) },
       },
       preHandler: async (request) => checkHouseholdPhone(request.body.household_phone),
     },
-    notImplemented('createFamily'),
+    async (request, reply) => reply.status(201).send(await createFamily(db, request.staff!, request.body)),
   );
 
   app.get(
@@ -59,13 +62,13 @@ export function registerFamilyRoutes(scope: FastifyInstance): void {
       schema: {
         operationId: 'getFamily',
         tags: [FAMILY_TAG],
-        summary: 'Household with members, phones, addresses, linked children and their rights',
+        summary: 'Household with members, phones, addresses, children (linked or with rights rows) and their rights',
         security,
         params: FamilyParams,
-        response: { 200: Type.Ref('Family'), ...errorResponses(...READ_ERRORS) },
+        response: { 200: Type.Ref('Family'), ...errorResponses(400, 401, 403, 404) },
       },
     },
-    notImplemented('getFamily'),
+    async (request) => getFamily(db, request.params.id),
   );
 
   app.patch(
@@ -78,11 +81,11 @@ export function registerFamilyRoutes(scope: FastifyInstance): void {
         security,
         params: FamilyParams,
         body: UpdateFamilyBody,
-        response: { 200: Type.Ref('Family'), ...errorResponses(...WRITE_ERRORS) },
+        response: { 200: Type.Ref('Family'), ...errorResponses(400, 401, 403, 404) },
       },
       preHandler: async (request) => checkHouseholdPhone(request.body.household_phone),
     },
-    notImplemented('updateFamily'),
+    async (request) => updateFamily(db, request.staff!, request.params.id, request.body),
   );
 
   app.post(

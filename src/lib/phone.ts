@@ -9,8 +9,13 @@
 
 const EXTENSION = /(?:ext\.?|x|#).*$/i;
 
+/** The digits of a phone once any extension is dropped. */
+export function phoneDigits(raw: string | null | undefined): string {
+  return (raw ?? '').replace(EXTENSION, '').replace(/\D/g, '');
+}
+
 /** Drops any extension, then digits only, last 10; '' when fewer than 10 digits remain. */
 export function normalizePhone(raw: string | null | undefined): string {
-  const digits = (raw ?? '').replace(EXTENSION, '').replace(/\D/g, '');
+  const digits = phoneDigits(raw);
   return digits.length >= 10 ? digits.slice(-10) : '';
 }
