@@ -81,12 +81,11 @@ describe('family request rules', () => {
     rejects400(() => checkHouseholdPhone('x'.repeat(31)), /household_phone.*30/);
   });
 
-  test("a new person's default legacy name (fname lname) fits the 100-character legacy name", () => {
+  test("a new person's legacy name (always fname lname) fits the 100-character legacy name", () => {
     assert.equal(defaultLegacyName({ fname: ' Avi ', lname: 'Test' }), 'Avi Test');
     assert.equal(defaultLegacyName({ fname: '', lname: 'Test' }), 'Test');
     checkAddMember({ person: { fname: 'a'.repeat(50), lname: 'b'.repeat(49) } });
     rejects400(() => checkAddMember({ person: { fname: 'a'.repeat(50), lname: 'b'.repeat(50) } }), /varchar\(100\)/);
-    checkAddMember({ person: { fname: 'a'.repeat(100), lname: 'b'.repeat(100), legacy_full_name: 'A B' } });
   });
 
   test('lengths are counted in characters (code points), like MariaDB and Ajv', () => {

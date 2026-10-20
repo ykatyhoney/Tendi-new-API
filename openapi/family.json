@@ -172,7 +172,7 @@
           "legacy_full_name": {
             "type": "string",
             "maxLength": 100,
-            "description": "Mirrored verbatim to children.father_name / mother_name"
+            "description": "Mirrored verbatim to children.father_name / mother_name. Read-only: set to \"fname lname\" for a new person, when PATCH /people/:id changes fname or lname, or with reset_legacy_full_name"
           },
           "hebrew_name": {
             "type": "string",
@@ -303,6 +303,238 @@
           },
           "person": {
             "$ref": "#/components/schemas/Person"
+          }
+        }
+      },
+      "MirrorWarning": {
+        "type": "object",
+        "required": [
+          "message",
+          "affected_child_ids"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "affected_child_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "minItems": 1,
+            "description": "Linked children whose mirrored legacy parent values (the 28 columns) this write changed"
+          }
+        },
+        "description": "Not an error: the write succeeded and the mirror rewrote what the legacy app shows for these children. Absent when no linked child changed."
+      },
+      "PersonResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "legacy_full_name",
+          "hebrew_name",
+          "email",
+          "note",
+          "occupation",
+          "employer",
+          "status",
+          "phones",
+          "addresses",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "fname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "lname": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "legacy_full_name": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Mirrored verbatim to children.father_name / mother_name. Read-only: set to \"fname lname\" for a new person, when PATCH /people/:id changes fname or lname, or with reset_legacy_full_name"
+          },
+          "hebrew_name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16777215
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occupation": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "employer": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "phones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhone"
+            }
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonAddress"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "updated_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "warning": {
+            "$ref": "#/components/schemas/MirrorWarning"
+          }
+        }
+      },
+      "FamilyMemberResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "family_id",
+          "person_id",
+          "relationship",
+          "is_primary",
+          "sort_order",
+          "status",
+          "person"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "family_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "person_id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "relationship": {
+            "type": "string",
+            "enum": [
+              "father",
+              "mother",
+              "step_father",
+              "step_mother",
+              "guardian",
+              "foster_parent",
+              "grandfather",
+              "grandmother",
+              "brother",
+              "sister",
+              "uncle",
+              "aunt",
+              "cousin",
+              "nanny",
+              "babysitter",
+              "car_service",
+              "doctor",
+              "family_friend",
+              "other"
+            ],
+            "maxLength": 32,
+            "description": "family_members.relationship. Only father, mother, step_father and step_mother fill the legacy parent slots."
+          },
+          "is_primary": {
+            "type": "boolean"
+          },
+          "sort_order": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "trash"
+            ],
+            "maxLength": 5,
+            "description": "active, or trash (soft-deleted)"
+          },
+          "person": {
+            "$ref": "#/components/schemas/Person"
+          },
+          "warning": {
+            "$ref": "#/components/schemas/MirrorWarning"
+          }
+        }
+      },
+      "PhonesResult": {
+        "type": "object",
+        "required": [
+          "phones"
+        ],
+        "properties": {
+          "phones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonPhone"
+            }
+          },
+          "warning": {
+            "$ref": "#/components/schemas/MirrorWarning"
+          }
+        }
+      },
+      "AddressesResult": {
+        "type": "object",
+        "required": [
+          "addresses"
+        ],
+        "properties": {
+          "addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonAddress"
+            }
+          },
+          "warning": {
+            "$ref": "#/components/schemas/MirrorWarning"
           }
         }
       },
@@ -1757,6 +1989,7 @@
         "tags": [
           "family"
         ],
+        "description": "A person is in a family at most once (uniq_fm): 409 when already an active member. A person removed earlier (status trash) is brought back with the new values (200). 404 for an unknown or trashed family or person_id.",
         "requestBody": {
           "required": true,
           "content": {
@@ -1784,11 +2017,6 @@
                         "type": "string",
                         "maxLength": 100,
                         "default": ""
-                      },
-                      "legacy_full_name": {
-                        "type": "string",
-                        "maxLength": 100,
-                        "description": "Mirrored verbatim to the legacy father_name / mother_name. For a new person it defaults to \"fname lname\", which must then be at most 100 characters"
                       },
                       "hebrew_name": {
                         "type": "string",
@@ -1819,7 +2047,8 @@
                         "maxLength": 150
                       }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": false,
+                    "description": "legacy_full_name is set to \"fname lname\" (mirrored to the legacy father_name / mother_name, varchar(100)), so \"fname lname\" may have at most 100 characters"
                   },
                   "relationship": {
                     "type": "string",
@@ -1881,12 +2110,22 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": "Default Response",
+          "200": {
+            "description": "A removed member brought back",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FamilyMember"
+                  "$ref": "#/components/schemas/FamilyMemberResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResult"
                 }
               }
             }
@@ -1940,16 +2179,6 @@
                 }
               }
             }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       }
@@ -1961,6 +2190,7 @@
         "tags": [
           "family"
         ],
+        "description": "Making a member primary clears is_primary on the family’s other members.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2040,7 +2270,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FamilyMember"
+                  "$ref": "#/components/schemas/FamilyMemberResult"
                 }
               }
             }
@@ -2084,32 +2314,12 @@
                 }
               }
             }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
           }
         }
       },
       "delete": {
         "operationId": "removeFamilyMember",
-        "summary": "Remove a member (sets status trash)",
+        "summary": "Remove a member (sets status trash; the row and its rights rows are kept)",
         "tags": [
           "family"
         ],
@@ -2141,8 +2351,15 @@
           }
         ],
         "responses": {
-          "204": {
-            "description": "Removed"
+          "200": {
+            "description": "The member, now status trash",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request (schema or business rule)",
@@ -2176,26 +2393,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2630,6 +2827,7 @@
         "tags": [
           "family"
         ],
+        "description": "legacy_full_name cannot be set directly: a change of fname or lname, or reset_legacy_full_name: true, sets it to \"fname lname\" (at most 100 characters). 404 for an unknown or trashed person.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2644,11 +2842,6 @@
                   "lname": {
                     "type": "string",
                     "maxLength": 100
-                  },
-                  "legacy_full_name": {
-                    "type": "string",
-                    "maxLength": 100,
-                    "description": "Mirrored verbatim to the legacy father_name / mother_name. For a new person it defaults to \"fname lname\", which must then be at most 100 characters"
                   },
                   "hebrew_name": {
                     "type": "string",
@@ -2677,6 +2870,10 @@
                   "employer": {
                     "type": "string",
                     "maxLength": 150
+                  },
+                  "reset_legacy_full_name": {
+                    "type": "boolean",
+                    "description": "true sets legacy_full_name to \"fname lname\" (after this edit; at most 100 characters). legacy_full_name is mirrored verbatim to the legacy father_name / mother_name and is never set to a free value; a change of fname or lname also sets it to \"fname lname\""
                   }
                 },
                 "additionalProperties": false,
@@ -2708,7 +2905,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Person"
+                  "$ref": "#/components/schemas/PersonResult"
                 }
               }
             }
@@ -2745,26 +2942,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2874,18 +3051,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "phones"
-                  ],
-                  "properties": {
-                    "phones": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PersonPhone"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/PhonesResult"
                 }
               }
             }
@@ -2922,26 +3088,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3048,18 +3194,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "required": [
-                    "addresses"
-                  ],
-                  "properties": {
-                    "addresses": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/PersonAddress"
-                      }
-                    }
-                  }
+                  "$ref": "#/components/schemas/AddressesResult"
                 }
               }
             }
@@ -3096,26 +3231,6 @@
           },
           "404": {
             "description": "Not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflicts with the current data",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "501": {
-            "description": "Not implemented yet (the contract is published; the handler arrives in a later step)",
             "content": {
               "application/json": {
                 "schema": {

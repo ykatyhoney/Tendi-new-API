@@ -68,10 +68,6 @@ export const UpdateFamilyBody = body(
 const personFields = {
   fname: Text(100),
   lname: Text(100),
-  legacy_full_name: Text(
-    100,
-    'Mirrored verbatim to the legacy father_name / mother_name. For a new person it defaults to "fname lname", which must then be at most 100 characters',
-  ),
   hebrew_name: Text(255),
   email: Text(255, 'Column varchar(255); the API accepts at most 150 characters (legacy *_email is varchar(150))'),
   note: Type.Union([Type.String({ maxLength: 16777215 }), Type.Null()]),
@@ -79,19 +75,38 @@ const personFields = {
   employer: Text(150),
 };
 
-export const NewPersonInput = body({
-  fname: withDefault(Text(100), ''),
-  lname: withDefault(Text(100), ''),
-  legacy_full_name: Type.Optional(personFields.legacy_full_name),
-  hebrew_name: Type.Optional(personFields.hebrew_name),
-  email: Type.Optional(personFields.email),
-  note: Type.Optional(personFields.note),
-  occupation: Type.Optional(personFields.occupation),
-  employer: Type.Optional(personFields.employer),
-});
+export const NewPersonInput = body(
+  {
+    fname: withDefault(Text(100), ''),
+    lname: withDefault(Text(100), ''),
+    hebrew_name: Type.Optional(personFields.hebrew_name),
+    email: Type.Optional(personFields.email),
+    note: Type.Optional(personFields.note),
+    occupation: Type.Optional(personFields.occupation),
+    employer: Type.Optional(personFields.employer),
+  },
+  {
+    description:
+      'legacy_full_name is set to "fname lname" (mirrored to the legacy father_name / mother_name, varchar(100)), so "fname lname" may have at most 100 characters',
+  },
+);
 
 export const UpdatePersonBody = body(
-  Object.fromEntries(Object.entries(personFields).map(([k, v]) => [k, Type.Optional(v)])),
+  {
+    fname: Type.Optional(personFields.fname),
+    lname: Type.Optional(personFields.lname),
+    hebrew_name: Type.Optional(personFields.hebrew_name),
+    email: Type.Optional(personFields.email),
+    note: Type.Optional(personFields.note),
+    occupation: Type.Optional(personFields.occupation),
+    employer: Type.Optional(personFields.employer),
+    reset_legacy_full_name: Type.Optional(
+      Type.Boolean({
+        description:
+          'true sets legacy_full_name to "fname lname" (after this edit; at most 100 characters). legacy_full_name is mirrored verbatim to the legacy father_name / mother_name and is never set to a free value; a change of fname or lname also sets it to "fname lname"',
+      }),
+    ),
+  },
   { minProperties: 1 },
 );
 

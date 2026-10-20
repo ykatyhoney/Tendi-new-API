@@ -1,5 +1,5 @@
-// /families routes (PLAN.md "Family API"). Search, detail, create and edit are implemented (step 3.4);
-// the others answer 501 until their step.
+// /families routes (PLAN.md "Family API"). Search, detail, create and edit (step 3.4) and the member
+// routes (step 3.5) are implemented; the others answer 501 until their step.
 
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
@@ -17,6 +17,7 @@ import {
 } from '../schemas/requests.ts';
 import type { FamilyDb } from '../db.ts';
 import { createFamily, getFamily, searchFamilies, updateFamily } from '../service/families.ts';
+import { addMember, removeMember, updateMember } from '../service/members.ts';
 import { checkAddMember, checkHouseholdPhone, checkRights } from '../service/validation.ts';
 import { FAMILY_TAG, READ_ERRORS, WRITE_ERRORS, errorResponses, notImplemented } from './common.ts';
 
@@ -95,14 +96,23 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
         operationId: 'addFamilyMember',
         tags: [FAMILY_TAG],
         summary: 'Add a person (existing: person_id; new: person) with a relationship',
+        description:
+          'A person is in a family at most once (uniq_fm): 409 when already an active member. A person removed earlier (status trash) is brought back with the new values (200). 404 for an unknown or trashed family or person_id.',
         security,
         params: FamilyParams,
         body: AddMemberBody,
-        response: { 201: Type.Ref('FamilyMember'), ...errorResponses(...WRITE_ERRORS) },
+        response: {
+          201: Type.Ref('FamilyMemberResult', { description: 'Added' }),
+          200: Type.Ref('FamilyMemberResult', { description: 'A removed member brought back' }),
+          ...errorResponses(400, 401, 403, 404, 409),
+        },
       },
       preHandler: async (request) => checkAddMember(request.body),
     },
-    notImplemented('addFamilyMember'),
+    async (request, reply) => {
+      const { status, body } = await addMember(db, request.staff!, request.params.id, request.body);
+      return reply.status(status).send(body);
+    },
   );
 
   app.patch(
@@ -113,12 +123,13 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
         tags: [FAMILY_TAG],
         summary: 'Change the relationship, primary flag or display order of a member',
         security,
+        description: 'Making a member primary clears is_primary on the family’s other members.',
         params: FamilyMemberParams,
         body: UpdateMemberBody,
-        response: { 200: Type.Ref('FamilyMember'), ...errorResponses(...WRITE_ERRORS) },
+        response: { 200: Type.Ref('FamilyMemberResult'), ...errorResponses(400, 401, 403, 404) },
       },
     },
-    notImplemented('updateFamilyMember'),
+    async (request) => updateMember(db, request.staff!, request.params.id, request.params.memberId, request.body),
   );
 
   app.delete(
@@ -127,13 +138,16 @@ export function registerFamilyRoutes(scope: FastifyInstance, db: FamilyDb): void
       schema: {
         operationId: 'removeFamilyMember',
         tags: [FAMILY_TAG],
-        summary: 'Remove a member (sets status trash)',
+        summary: 'Remove a member (sets status trash; the row and its rights rows are kept)',
         security,
         params: FamilyMemberParams,
-        response: { 204: Type.Null({ description: 'Removed' }), ...errorResponses(...WRITE_ERRORS) },
+        response: {
+          200: Type.Ref('FamilyMemberResult', { description: 'The member, now status trash' }),
+          ...errorResponses(400, 401, 403, 404),
+        },
       },
     },
-    notImplemented('removeFamilyMember'),
+    async (request) => removeMember(db, request.staff!, request.params.id, request.params.memberId),
   );
 
   app.put(

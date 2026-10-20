@@ -148,20 +148,29 @@ export interface MemberRow {
   person_updated_at: string;
 }
 
+const MEMBER_WITH_PERSON = `
+  SELECT fm.id, fm.family_id, fm.person_id, fm.relationship, fm.is_primary, fm.sort_order, fm.status,
+         p.fname, p.lname, p.legacy_full_name, p.hebrew_name, p.email, p.note, p.occupation, p.employer,
+         p.status AS person_status, p.created_at AS person_created_at, p.updated_at AS person_updated_at
+    FROM family_members fm
+    JOIN people p ON p.id = fm.person_id`;
+
 /** Active members of the families, with their person, by family, sort_order, id. */
 export async function membersOf(db: Queryable, familyIds: number[]): Promise<MemberRow[]> {
   if (familyIds.length === 0) return [];
   const [rows] = await db.query<RowDataPacket[]>(
-    `SELECT fm.id, fm.family_id, fm.person_id, fm.relationship, fm.is_primary, fm.sort_order, fm.status,
-            p.fname, p.lname, p.legacy_full_name, p.hebrew_name, p.email, p.note, p.occupation, p.employer,
-            p.status AS person_status, p.created_at AS person_created_at, p.updated_at AS person_updated_at
-       FROM family_members fm
-       JOIN people p ON p.id = fm.person_id
+    `${MEMBER_WITH_PERSON}
       WHERE fm.family_id IN (?) AND fm.status = 'active'
       ORDER BY fm.family_id, fm.sort_order, fm.id`,
     [familyIds],
   );
   return rows as MemberRow[];
+}
+
+/** One member (any status) with their person. */
+export async function memberWithPerson(db: Queryable, memberId: number): Promise<MemberRow> {
+  const [rows] = await db.query<RowDataPacket[]>(`${MEMBER_WITH_PERSON} WHERE fm.id = ?`, [memberId]);
+  return rows[0] as MemberRow;
 }
 
 export interface PhoneRowDb {

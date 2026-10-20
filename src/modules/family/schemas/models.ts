@@ -47,7 +47,10 @@ export const Person = Type.Object(
     id: Id,
     fname: Text(100),
     lname: Text(100),
-    legacy_full_name: Text(100, 'Mirrored verbatim to children.father_name / mother_name'),
+    legacy_full_name: Text(
+      100,
+      'Mirrored verbatim to children.father_name / mother_name. Read-only: set to "fname lname" for a new person, when PATCH /people/:id changes fname or lname, or with reset_legacy_full_name',
+    ),
     hebrew_name: Text(255),
     email: Text(255),
     note: Type.Union([Type.String({ maxLength: 16777215 }), Type.Null()]),
@@ -74,6 +77,40 @@ export const FamilyMember = Type.Object(
     person: Type.Ref('Person'),
   },
   { $id: 'FamilyMember' },
+);
+
+export const MirrorWarning = Type.Object(
+  {
+    message: Type.String(),
+    affected_child_ids: Type.Array(Id, {
+      minItems: 1,
+      description: 'Linked children whose mirrored legacy parent values (the 28 columns) this write changed',
+    }),
+  },
+  {
+    $id: 'MirrorWarning',
+    description:
+      'Not an error: the write succeeded and the mirror rewrote what the legacy app shows for these children. Absent when no linked child changed.',
+  },
+);
+
+const warning = { warning: Type.Optional(Type.Ref('MirrorWarning')) };
+
+export const PersonResult = Type.Object({ ...Person.properties, ...warning }, { $id: 'PersonResult' });
+
+export const FamilyMemberResult = Type.Object(
+  { ...FamilyMember.properties, ...warning },
+  { $id: 'FamilyMemberResult' },
+);
+
+export const PhonesResult = Type.Object(
+  { phones: Type.Array(Type.Ref('PersonPhone')), ...warning },
+  { $id: 'PhonesResult' },
+);
+
+export const AddressesResult = Type.Object(
+  { addresses: Type.Array(Type.Ref('PersonAddress')), ...warning },
+  { $id: 'AddressesResult' },
 );
 
 export const ChildRight = Type.Object(
@@ -234,6 +271,11 @@ export const familySchemas = [
   PersonAddress,
   Person,
   FamilyMember,
+  MirrorWarning,
+  PersonResult,
+  FamilyMemberResult,
+  PhonesResult,
+  AddressesResult,
   ChildRight,
   FamilyChild,
   Family,

@@ -34,7 +34,7 @@ export default async function familyModule(app: FastifyInstance): Promise<void> 
     protectScope(api, db, config.allowedStaffTypes);
     registerStaffRoutes(api);
     registerFamilyRoutes(api, db);
-    registerPeopleRoutes(api);
+    registerPeopleRoutes(api, db);
     registerChildrenRoutes(api);
   });
 }
