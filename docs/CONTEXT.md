@@ -177,7 +177,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
   - `GET /staff/me` returns `request.staff`. The OpenAPI document declares the `bearerAuth` scheme.
   - How staff obtain a token is still open (see Open questions).
 - **Role checks:** after authentication, the guard allows the `admin.type` values in **`FAMILY_ALLOWED_STAFF_TYPES`** (comma-separated, checked against the `admin.type` enum at startup) and answers 403 to anything else.
-  - **Default: `admin,superadmin,office`**, as recorded at Step 0.1. Decision D5 is still to be confirmed (PLAN.md lists it as Pending and recommends `admin` and `office` only). Changing it is an env change, not a code change.
+  - **Default: `admin,office`**: decision D5, settled on 2026-10-21 as PLAN.md recommends (until then the default also allowed `superadmin`). Changing it is an env change, not a code change. **Tendi-new mirrors the list** (`lib/auth/roles.ts`, `FAMILY_STAFF_TYPES`) to show and guard its Families screens: change both together.
   - `developer` and the other types get 403 unless they are added (open question 4, item 5).
 
 ## CORS
@@ -275,7 +275,7 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
 - Set `children.family_id` (link, unlink, demos, fixtures, tests) only in `tendi_family_test`, never in `tendi_family_dev` (CLAUDE.md rule 7). The mirror would overwrite the dev legacy values that the backfill and the proof run read.
 - Never change or drop an existing column the PHP app reads. Only the database mirror writes the 28 mirrored legacy parent columns (`home_send_notification` stays form-owned).
 - Every family write runs in one transaction through `withTransaction` (with `auditUser`) and writes an `audit_logs` row.
-- Only the staff types in `FAMILY_ALLOWED_STAFF_TYPES` (default `admin,superadmin,office`; D5 to be confirmed) may use the Family API. Every family route except `/health/family` goes in the module's protected scope.
+- Only the staff types in `FAMILY_ALLOWED_STAFF_TYPES` (default `admin,office`; decision D5) may use the Family API. Every family route except `/health/family` goes in the module's protected scope.
 - When a step sets up or changes a convention, update this file in the same pull request.
 
 ## Open questions
@@ -290,4 +290,4 @@ Fastify backend for Tendi. It owns the family database objects (migrations, proc
    4. How is `admin.password` stored, and how does the current staff login check it? Is `admin.login_auth` the same token form?
       - The 2026-09-24 dump shows: all 14 `admin.password` values are 32-character lowercase hex in a `varchar(50)` column, which fits md5 and rules out bcrypt (60 characters).
       - `admin.login_auth` is empty in every row, and `admin_api_tokens` has no rows (anonymized dump), so neither can be checked against data.
-   5. Should `superadmin` and `developer` accounts have access to the Families screens (decision D5)?
+   5. ~~Should `superadmin` and `developer` accounts have access to the Families screens (decision D5)?~~ Settled on 2026-10-21: no; `admin` and `office` only.

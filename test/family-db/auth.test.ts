@@ -84,7 +84,6 @@ describe('family staff auth', () => {
     assert.equal(t.fresh, 1);
 
     assert.equal((await me(tokens.office)).statusCode, 200, 'office is allowed');
-    assert.equal((await me(tokens.superadmin)).statusCode, 200, 'superadmin is allowed with the default list');
   });
 
   test('missing or malformed Authorization header: 401 with WWW-Authenticate', async () => {
@@ -119,6 +118,7 @@ describe('family staff auth', () => {
       message: "Staff type 'teacher' may not use the Family API",
     });
     assert.equal((await me(tokens.developer)).statusCode, 403, 'developer is not in the default list');
+    assert.equal((await me(tokens.superadmin)).statusCode, 403, 'superadmin is not in the default list (D5: admin, office)');
 
     const [stale] = await admin.query<RowDataPacket[]>(
       'SELECT COUNT(*) AS n FROM admin_api_tokens WHERE token_hash IN (MD5(?), MD5(?)) AND last_seen_at < NOW() - INTERVAL 23 HOUR',

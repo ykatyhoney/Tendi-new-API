@@ -24,11 +24,10 @@ describe('family module', () => {
     );
   });
 
-  test('the allowed staff types come from config: default admin, superadmin, office; unknown types rejected', () => {
+  test('the allowed staff types come from config: default admin, office (D5); unknown types rejected', () => {
     const base = { FAMILY_DB_USER: 'family_api', FAMILY_DB_PASSWORD: 'x' };
     assert.deepEqual(loadFamilyConfig({ ...base, FAMILY_ALLOWED_STAFF_TYPES: undefined }).allowedStaffTypes, [
       'admin',
-      'superadmin',
       'office',
     ]);
     assert.deepEqual(

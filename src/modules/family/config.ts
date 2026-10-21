@@ -30,7 +30,9 @@ const FamilyEnv = Type.Object({
    * Comma-separated admin.type values allowed to use the Family API. Default as recorded in
    * docs/CONTEXT.md; decision D5 is still to be confirmed (it may change without code edits).
    */
-  FAMILY_ALLOWED_STAFF_TYPES: Type.String({ minLength: 1, default: 'admin,superadmin,office' }),
+  // Decision D5 (settled 2026-10-21): admin and office only. Tendi-new mirrors this list in
+  // lib/auth/roles.ts (FAMILY_STAFF_TYPES); change both together.
+  FAMILY_ALLOWED_STAFF_TYPES: Type.String({ minLength: 1, default: 'admin,office' }),
 });
 
 export interface FamilyConfig {
