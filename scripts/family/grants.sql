@@ -33,8 +33,16 @@ GRANT SELECT ON children                        TO 'family_api'@'localhost';
 GRANT SELECT ON children_additional_information TO 'family_api'@'localhost';
 GRANT SELECT ON admin                           TO 'family_api'@'localhost';
 GRANT SELECT ON admin_api_tokens                TO 'family_api'@'localhost';
--- The class name shown for each child (GET /families, GET /families/:id); no other classes column
-GRANT SELECT (id, name) ON classes TO 'family_api'@'localhost';
+-- The class name shown for each child (GET /families, GET /families/:id), and the class's branch
+-- for the linked children per branch (GET /families/admin/pilot-stats); no other classes column
+GRANT SELECT (id, name, branch) ON classes TO 'family_api'@'localhost';
+GRANT SELECT (id, name) ON branches TO 'family_api'@'localhost';
+-- GET /families/admin/pilot-stats (Gate D): the reconciliation runs and the lock log, without their
+-- values (family_reconcile_runs.details, family_mirror_lock_log.attempted_value / kept_value hold
+-- parent data), and the request timings
+GRANT SELECT (id, run_at, run_date, trigger_source, linked_children, drifted_children) ON family_reconcile_runs TO 'family_api'@'localhost';
+GRANT SELECT (id, child_id, table_name, col_name, created_at) ON family_mirror_lock_log TO 'family_api'@'localhost';
+GRANT SELECT ON family_api_request_timings TO 'family_api'@'localhost';
 
 -- Writes to the 6 family tables (the triggers on them run as their definer and do the mirroring)
 GRANT INSERT, UPDATE, DELETE ON families               TO 'family_api'@'localhost';
@@ -49,6 +57,9 @@ GRANT UPDATE (family_id) ON children TO 'family_api'@'localhost';
 
 -- The audit_logs row every family write adds (backend CLAUDE.md rule 5)
 GRANT INSERT ON audit_logs TO 'family_api'@'localhost';
+
+-- How long each write request took (src/modules/family/request-timings.ts; backend CLAUDE.md rule 4)
+GRANT INSERT ON family_api_request_timings TO 'family_api'@'localhost';
 
 -- Staff authentication (src/modules/family/service/auth.ts) records when a token was last used
 GRANT UPDATE (last_seen_at) ON admin_api_tokens TO 'family_api'@'localhost';

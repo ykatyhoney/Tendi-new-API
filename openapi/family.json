@@ -1400,6 +1400,226 @@
             "type": "string"
           }
         }
+      },
+      "PilotReconcileRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "run_at",
+          "run_date",
+          "trigger_source",
+          "linked_children",
+          "drifted_children"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "run_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+          },
+          "run_date": {
+            "type": "string",
+            "format": "date",
+            "description": "YYYY-MM-DD, database server date"
+          },
+          "trigger_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "scheduled"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "manual"
+                ]
+              }
+            ],
+            "description": "scheduled: the nightly run; manual: npm run family:reconcile -- --once"
+          },
+          "linked_children": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "drifted_children": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "description": "A family_reconcile_runs row (without its details)"
+      },
+      "PilotLockLogDay": {
+        "type": "object",
+        "required": [
+          "day",
+          "child_id",
+          "table_name",
+          "col_name",
+          "rows"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "description": "YYYY-MM-DD, database server date"
+          },
+          "child_id": {
+            "type": "integer"
+          },
+          "table_name": {
+            "type": "string",
+            "description": "children or children_additional_information"
+          },
+          "col_name": {
+            "type": "string",
+            "description": "The mirrored column the legacy app tried to write"
+          },
+          "rows": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "family_mirror_lock_log rows that day for this child and column"
+          }
+        },
+        "description": "Legacy writes the lock reverted, per day, child and column"
+      },
+      "PilotWriteTimings": {
+        "type": "object",
+        "required": [
+          "requests",
+          "p95_ms",
+          "target_ms"
+        ],
+        "properties": {
+          "requests": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Successful (2xx) Family API write requests in the window"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "95th percentile (nearest rank) of their duration in ms, as the API measured it; null without requests"
+          },
+          "target_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Gate D target for p95_ms (FAMILY_PILOT_P95_TARGET_MS)"
+          }
+        }
+      },
+      "PilotBranchCount": {
+        "type": "object",
+        "required": [
+          "branch_id",
+          "branch_name",
+          "linked_children"
+        ],
+        "properties": {
+          "branch_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 2147483647
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "classes.branch of the child's class; null without one"
+          },
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "branches.name"
+          },
+          "linked_children": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "PilotStats": {
+        "type": "object",
+        "required": [
+          "window",
+          "reconcile_runs",
+          "lock_log",
+          "write_timings",
+          "linked_children_by_branch"
+        ],
+        "properties": {
+          "window": {
+            "type": "object",
+            "required": [
+              "from",
+              "to",
+              "days"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "format": "date",
+                "description": "YYYY-MM-DD, database server date"
+              },
+              "to": {
+                "type": "string",
+                "format": "date",
+                "description": "YYYY-MM-DD, database server date"
+              },
+              "days": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "description": "The last `days` calendar days, today included"
+          },
+          "reconcile_runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PilotReconcileRun"
+            },
+            "description": "By run_at, oldest first"
+          },
+          "lock_log": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PilotLockLogDay"
+            },
+            "description": "By day, child and column"
+          },
+          "write_timings": {
+            "$ref": "#/components/schemas/PilotWriteTimings"
+          },
+          "linked_children_by_branch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PilotBranchCount"
+            },
+            "description": "Children linked now (not limited to the window), by branch name"
+          }
+        },
+        "description": "Gate D (PLAN.md \"Rollout\") figures for the last 14 days"
       }
     }
   },
@@ -3549,6 +3769,53 @@
           },
           "409": {
             "description": "Conflicts with the current data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/families/admin/pilot-stats": {
+      "get": {
+        "operationId": "getPilotStats",
+        "summary": "Gate D pilot statistics for the last 14 days (admin staff only)",
+        "tags": [
+          "family"
+        ],
+        "description": "Reconciliation runs (linked and drifted children), the lock log per day, child and column (where the legacy app still writes parent data), the p95 duration of successful Family API writes with its target, and the linked children per branch. Read-only; 403 for any staff type other than admin.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gate D (PLAN.md \"Rollout\") figures for the last 14 days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PilotStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown or inactive staff token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Staff type not allowed to use the Family API",
             "content": {
               "application/json": {
                 "schema": {

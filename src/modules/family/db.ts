@@ -1,5 +1,6 @@
 // The family module's own connection pool, as family_api (scripts/family/grants.sql): it can read
-// what the Family API needs, write the 6 family tables, children.family_id and audit_logs, and
+// what the Family API needs, write the 6 family tables, children.family_id, audit_logs and
+// family_api_request_timings (request-timings.ts), and
 // call sp_family_preview. It cannot write any legacy parent column; the database mirror does.
 //
 // Every write goes through familyDb.transaction (the app's withTransaction on this pool): one

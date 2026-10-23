@@ -50,7 +50,11 @@ describe('family_api grants', () => {
         'GRANT SELECT, UPDATE (`last_seen_at`) ON `admin_api_tokens`',
         'GRANT SELECT ON `children_additional_information`',
         'GRANT SELECT, UPDATE (`family_id`) ON `children`',
-        'GRANT SELECT (`id`, `name`) ON `classes`',
+        'GRANT SELECT (`branch`, `id`, `name`) ON `classes`',
+        'GRANT SELECT (`id`, `name`) ON `branches`',
+        'GRANT SELECT (`drifted_children`, `id`, `linked_children`, `run_at`, `run_date`, `trigger_source`) ON `family_reconcile_runs`',
+        'GRANT SELECT (`child_id`, `col_name`, `created_at`, `id`, `table_name`) ON `family_mirror_lock_log`',
+        'GRANT SELECT, INSERT ON `family_api_request_timings`',
         'GRANT INSERT ON `audit_logs`',
         'GRANT EXECUTE ON PROCEDURE `sp_family_preview`',
       ].sort(),
@@ -70,8 +74,14 @@ describe('family_api grants', () => {
     await denied('CALL sp_family_mirror(?)', 1370, [child]);
     await denied('CALL sp_family_mirror_values(?, NULL, @a,@b,@c,@d,@e,@f,@g,@h,@i,@j,@k,@l,@m,@n,@o,@p,@q,@r,@s,@t,@u,@v,@w,@x,@y,@z,@aa,@bb)', 1370, [child]);
     await denied('DELETE FROM audit_logs WHERE id = 0', 1142);
-    await denied('SELECT COUNT(*) FROM family_reconcile_runs', 1142);
+    // The pilot statistics read these tables, but never their values (parent data).
+    await denied('SELECT details FROM family_reconcile_runs LIMIT 1', 1143);
+    await denied('SELECT attempted_value FROM family_mirror_lock_log LIMIT 1', 1143);
+    await denied('SELECT kept_value FROM family_mirror_lock_log LIMIT 1', 1143);
+    await denied('INSERT INTO family_reconcile_runs (run_at, run_date, linked_children, drifted_children, lock_log_rows) VALUES (NOW(), CURDATE(), 0, 0, 0)', 1142);
+    await denied('DELETE FROM family_api_request_timings WHERE id = 0', 1142);
     await denied('SELECT phone_number FROM classes LIMIT 1', 1143);
+    await denied('SELECT address FROM branches LIMIT 1', 1143);
   });
 
   test('can still link a child: the mirror (run as its definer) fills the legacy columns', async () => {

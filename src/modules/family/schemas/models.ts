@@ -313,6 +313,72 @@ export const StaffMember = Type.Object(
   { $id: 'StaffMember' },
 );
 
+// --- Gate D pilot statistics (GET /families/admin/pilot-stats) ------------------------------------
+
+const IsoDay = Type.String({ format: 'date', description: 'YYYY-MM-DD, database server date' });
+
+export const PilotReconcileRun = Type.Object(
+  {
+    id: Id,
+    run_at: DateTime,
+    run_date: IsoDay,
+    trigger_source: Type.Union([Type.Literal('scheduled'), Type.Literal('manual')], {
+      description: 'scheduled: the nightly run; manual: npm run family:reconcile -- --once',
+    }),
+    linked_children: Type.Integer({ minimum: 0 }),
+    drifted_children: Type.Integer({ minimum: 0 }),
+  },
+  { $id: 'PilotReconcileRun', description: 'A family_reconcile_runs row (without its details)' },
+);
+
+export const PilotLockLogDay = Type.Object(
+  {
+    day: IsoDay,
+    child_id: Type.Integer(),
+    table_name: Type.String({ description: 'children or children_additional_information' }),
+    col_name: Type.String({ description: 'The mirrored column the legacy app tried to write' }),
+    rows: Type.Integer({ minimum: 1, description: 'family_mirror_lock_log rows that day for this child and column' }),
+  },
+  { $id: 'PilotLockLogDay', description: 'Legacy writes the lock reverted, per day, child and column' },
+);
+
+export const PilotWriteTimings = Type.Object(
+  {
+    requests: Type.Integer({ minimum: 0, description: 'Successful (2xx) Family API write requests in the window' }),
+    p95_ms: Type.Union([Type.Number({ minimum: 0 }), Type.Null()], {
+      description:
+        '95th percentile (nearest rank) of their duration in ms, as the API measured it; null without requests',
+    }),
+    target_ms: Type.Integer({ minimum: 1, description: 'Gate D target for p95_ms (FAMILY_PILOT_P95_TARGET_MS)' }),
+  },
+  { $id: 'PilotWriteTimings' },
+);
+
+export const PilotBranchCount = Type.Object(
+  {
+    branch_id: Type.Union([Id, Type.Null()], { description: "classes.branch of the child's class; null without one" }),
+    branch_name: Type.Union([Type.String({ maxLength: 50 }), Type.Null()], { description: 'branches.name' }),
+    linked_children: Type.Integer({ minimum: 1 }),
+  },
+  { $id: 'PilotBranchCount' },
+);
+
+export const PilotStats = Type.Object(
+  {
+    window: Type.Object(
+      { from: IsoDay, to: IsoDay, days: Type.Integer({ minimum: 1 }) },
+      { description: 'The last `days` calendar days, today included' },
+    ),
+    reconcile_runs: Type.Array(Type.Ref('PilotReconcileRun'), { description: 'By run_at, oldest first' }),
+    lock_log: Type.Array(Type.Ref('PilotLockLogDay'), { description: 'By day, child and column' }),
+    write_timings: Type.Ref('PilotWriteTimings'),
+    linked_children_by_branch: Type.Array(Type.Ref('PilotBranchCount'), {
+      description: 'Children linked now (not limited to the window), by branch name',
+    }),
+  },
+  { $id: 'PilotStats', description: 'Gate D (PLAN.md "Rollout") figures for the last 14 days' },
+);
+
 /** Every shared schema of the module, in dependency order, for app.addSchema. */
 export const familySchemas = [
   PersonPhone,
@@ -339,4 +405,9 @@ export const familySchemas = [
   ChildSearchResult,
   LinkResult,
   StaffMember,
+  PilotReconcileRun,
+  PilotLockLogDay,
+  PilotWriteTimings,
+  PilotBranchCount,
+  PilotStats,
 ];

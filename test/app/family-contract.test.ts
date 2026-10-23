@@ -35,6 +35,8 @@ const EXPECTED_OPERATIONS = {
   'POST /children/{childId}/unlink': 'unlinkChild',
   'GET /staff/me': 'getCurrentStaff',
   'GET /health/family': 'getFamilyHealth',
+  // Added 2026-10-21 for the Gate D pilot page (not in PLAN.md's table)
+  'GET /families/admin/pilot-stats': 'getPilotStats',
 };
 
 async function openapi() {

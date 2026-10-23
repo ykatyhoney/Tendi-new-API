@@ -21,7 +21,7 @@ EXPECTED_RA_TRIGGER_TABLES=104
 EXPECTED_ROUTINES=0
 
 # Tables added by migrations/family; counted apart from the dump's 209.
-FAMILY_TABLES="'families','people','family_members','people_phones','people_addresses','family_member_children','family_mirror_lock_log','family_backfill_runs','family_backfill_rows','family_backfill_child_map','family_reconcile_runs'"
+FAMILY_TABLES="'families','people','family_members','people_phones','people_addresses','family_member_children','family_mirror_lock_log','family_backfill_runs','family_backfill_rows','family_backfill_child_map','family_reconcile_runs','family_api_request_timings'"
 
 PRODUCTION_VERSION="10.11.9"
 
@@ -171,7 +171,7 @@ verify_database() {
   echo
   echo "Checks for $db_name:"
   check "base tables from the dump" "$EXPECTED_BASE_TABLES" "$base_tables"
-  printf '  %-48s %8s  (0 after restore, 11 after migrations)\n' "family tables" "$family_tables"
+  printf '  %-48s %8s  (0 after restore, 12 after migrations)\n' "family tables" "$family_tables"
   check "views" "$EXPECTED_VIEWS" "$views"
   check "children rows" "$EXPECTED_CHILDREN" "$children"
   check "children_additional_information rows" "$EXPECTED_CAI" "$cai"

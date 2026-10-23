@@ -4,7 +4,8 @@
 // validation, so an unauthenticated request gets 401 whatever its body. CORS preflights (OPTIONS)
 // are answered by @fastify/cors on the root instance and never reach it.
 
-import type { FastifyInstance, onRequestAsyncHookHandler } from 'fastify';
+import type { FastifyInstance, onRequestAsyncHookHandler, preHandlerAsyncHookHandler } from 'fastify';
+import { HttpError } from '../../errors.ts';
 import type { FamilyDb } from './db.ts';
 import { authenticateStaff, type Staff } from './service/auth.ts';
 
@@ -22,6 +23,18 @@ export function staffAuth(db: FamilyDb, allowedTypes: string[]): onRequestAsyncH
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode === 401) reply.header('WWW-Authenticate', 'Bearer');
       throw error;
+    }
+  };
+}
+
+/**
+ * A route's preHandler that narrows the scope's allowed staff types to `types` (403 otherwise).
+ * It runs after the auth hook, so the request is already authenticated and allowed.
+ */
+export function requireStaffTypes(...types: string[]): preHandlerAsyncHookHandler {
+  return async (request) => {
+    if (!types.includes(request.staff!.type)) {
+      throw new HttpError(403, `Only ${types.join(' or ')} staff may use this route`);
     }
   };
 }

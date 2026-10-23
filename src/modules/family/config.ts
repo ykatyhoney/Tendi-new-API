@@ -33,11 +33,19 @@ const FamilyEnv = Type.Object({
   // Decision D5 (settled 2026-10-21): admin and office only. Tendi-new mirrors this list in
   // lib/auth/roles.ts (FAMILY_STAFF_TYPES); change both together.
   FAMILY_ALLOWED_STAFF_TYPES: Type.String({ minLength: 1, default: 'admin,office' }),
+  /**
+   * Gate D (PLAN.md "Rollout"): the p95 duration of Family API write requests the pilot must stay
+   * within, reported by GET /families/admin/pilot-stats. 200 ms is the 5-sibling save target of
+   * test/family-db/performance.test.ts (FAMILY_DB_PERF_TARGET_MS).
+   */
+  FAMILY_PILOT_P95_TARGET_MS: Type.Integer({ minimum: 1, default: 200 }),
 });
 
 export interface FamilyConfig {
   db: { user: string; password: string; poolSize: number };
   allowedStaffTypes: string[];
+  /** FAMILY_PILOT_P95_TARGET_MS */
+  pilotP95TargetMs: number;
 }
 
 export function loadFamilyConfig(environment: Record<string, string | undefined> = process.env): FamilyConfig {
@@ -54,5 +62,6 @@ export function loadFamilyConfig(environment: Record<string, string | undefined>
   return {
     db: { user: env.FAMILY_DB_USER, password: env.FAMILY_DB_PASSWORD, poolSize: env.FAMILY_DB_POOL_SIZE },
     allowedStaffTypes,
+    pilotP95TargetMs: env.FAMILY_PILOT_P95_TARGET_MS,
   };
 }

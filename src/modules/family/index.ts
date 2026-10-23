@@ -17,7 +17,9 @@ import { registerChildrenRoutes } from './routes/children.ts';
 import { registerFamilyRoutes } from './routes/families.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerPeopleRoutes } from './routes/people.ts';
+import { registerPilotStatsRoutes } from './routes/pilot-stats.ts';
 import { registerStaffRoutes } from './routes/staff.ts';
+import { recordWriteTimings } from './request-timings.ts';
 
 export { familySchemas } from './schemas/models.ts';
 
@@ -39,9 +41,11 @@ export default async function familyModule(app: FastifyInstance, options: Family
 
   await app.register(async (api) => {
     protectScope(api, db, config.allowedStaffTypes);
+    recordWriteTimings(api, db);
     registerStaffRoutes(api);
     registerFamilyRoutes(api, db);
     registerPeopleRoutes(api, db);
     registerChildrenRoutes(api, db);
+    registerPilotStatsRoutes(api, db, config.pilotP95TargetMs);
   });
 }
