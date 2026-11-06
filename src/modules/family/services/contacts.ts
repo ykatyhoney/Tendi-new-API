@@ -1,0 +1,109 @@
+import type { Pool } from 'mysql2/promise'
+import {
+  findActiveContact,
+  listAddresses,
+  listEmails,
+  listHouseholds,
+  listPhones,
+  pageContacts,
+  searchContactIds,
+} from '../repositories/contacts.js'
+import type { ContactDetail, ContactPage } from '../schemas/contact.js'
+import type { FamilySearchQuery } from '../schemas/family.js'
+import { asBoolean, asNumber, asNullableString, asString, groupBy } from './values.js'
+
+export async function searchContacts(db: Pool, query: FamilySearchQuery): Promise<ContactPage> {
+  const ids = await searchContactIds(db, query.q ?? '')
+  const page = await pageContacts(db, ids, query.page, query.pageSize)
+  const contactIds = page.contacts.map((contact) => asNumber(contact.id))
+  const [phones, households] = await Promise.all([
+    listPhones(db, contactIds),
+    listHouseholds(db, contactIds),
+  ])
+  const phonesByContact = groupBy(phones, (row) => asNumber(row.contactId))
+  const householdsByContact = groupBy(households, (row) => asNumber(row.contactId))
+  return {
+    items: page.contacts.map((contact) => {
+      const id = asNumber(contact.id)
+      return {
+        id,
+        fname: asString(contact.fname),
+        lname: asString(contact.lname),
+        legacyFullName: asString(contact.legacyFullName),
+        phones: (phonesByContact.get(id) ?? []).map((row) => ({
+          phone: asString(row.phone),
+          type: row.type,
+          isPrimary: asBoolean(row.isPrimary),
+        })),
+        households: (householdsByContact.get(id) ?? []).map((row) => ({
+          familyId: asNumber(row.familyId),
+          familyName: asString(row.familyName),
+        })),
+      }
+    }),
+    page: query.page,
+    pageSize: query.pageSize,
+    total: page.total,
+  }
+}
+
+export async function getContact(db: Pool, id: number): Promise<ContactDetail | null> {
+  const contact = await findActiveContact(db, id)
+  if (contact === null) {
+    return null
+  }
+  const [phones, emails, addresses, households] = await Promise.all([
+    listPhones(db, [id]),
+    listEmails(db, [id]),
+    listAddresses(db, [id]),
+    listHouseholds(db, [id]),
+  ])
+  return {
+    id: asNumber(contact.id),
+    fname: asString(contact.fname),
+    lname: asString(contact.lname),
+    legacyFullName: asString(contact.legacyFullName),
+    hebrewName: asString(contact.hebrewName),
+    occupation: asString(contact.occupation),
+    employer: asString(contact.employer),
+    note: asNullableString(contact.note),
+    phones: phones.map((row) => ({
+      id: asNumber(row.id),
+      phone: asString(row.phone),
+      type: row.type,
+      typeLabel: asNullableString(row.typeLabel),
+      channel: row.channel,
+      isPrimary: asBoolean(row.isPrimary),
+      sortOrder: asNumber(row.sortOrder),
+    })),
+    emails: emails.map((row) => ({
+      id: asNumber(row.id),
+      email: asString(row.email),
+      type: row.type,
+      typeLabel: asNullableString(row.typeLabel),
+      isPrimary: asBoolean(row.isPrimary),
+      sortOrder: asNumber(row.sortOrder),
+    })),
+    addresses: addresses.map((row) => ({
+      id: asNumber(row.id),
+      type: row.type,
+      typeLabel: asNullableString(row.typeLabel),
+      line1: asString(row.line1),
+      line2: asString(row.line2),
+      city: asString(row.city),
+      state: asString(row.state),
+      zip: asString(row.zip),
+      isPrimary: asBoolean(row.isPrimary),
+    })),
+    households: households.map((row) => ({
+      familyId: asNumber(row.familyId),
+      familyName: asString(row.familyName),
+      familyStatus: row.familyStatus,
+      memberId: asNumber(row.memberId),
+      relationship: asString(row.relationship),
+      relationshipLabel: asString(row.relationshipLabel),
+      isPrimary: asBoolean(row.isPrimary),
+      sortOrder: asNumber(row.sortOrder),
+    })),
+  }
+}

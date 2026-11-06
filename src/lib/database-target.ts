@@ -32,3 +32,12 @@ export function assertAllowedDatabase(name: string): void {
     )
   }
 }
+
+/** Dev tokens are created only in the two working copies, never in the schema reference. */
+export function assertFamilyDatabase(name: string): void {
+  if (name !== RESET_DATABASES.dev && name !== RESET_DATABASES.test) {
+    throw new Error(
+      `Refusing database ${name}. family:dev-token only allows tendi_family_dev and tendi_family_test.`,
+    )
+  }
+}

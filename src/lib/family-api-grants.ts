@@ -93,9 +93,14 @@ export function familyApiGrantStatements(database: string): string[] {
     statements.push(
       `GRANT SELECT, INSERT, UPDATE (${columnList(ADDITIONAL_UPDATE_COLUMNS)}) ON ${db}.${quoteIdentifier('children_additional_information')} TO ${user}`,
     )
-    for (const table of ['classes', 'branches', 'admin_api_tokens']) {
+    for (const table of ['classes', 'branches']) {
       statements.push(`GRANT SELECT ON ${db}.${quoteIdentifier(table)} TO ${user}`)
     }
+    statements.push(`GRANT SELECT ON ${db}.${quoteIdentifier('admin_api_tokens')} TO ${user}`)
+    // Staff auth updates last_seen_at. The account cannot insert or delete tokens.
+    statements.push(
+      `GRANT UPDATE (${quoteIdentifier('last_seen_at')}) ON ${db}.${quoteIdentifier('admin_api_tokens')} TO ${user}`,
+    )
     statements.push(
       `GRANT SELECT (${columnList(ADMIN_READ_COLUMNS)}) ON ${db}.${quoteIdentifier('admin')} TO ${user}`,
     )

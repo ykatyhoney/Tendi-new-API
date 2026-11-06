@@ -16,9 +16,10 @@ describe('buildApp', () => {
     const app = await buildApp({ config, logger: false })
     apps.push(app)
 
-    const response = await app.inject({ method: 'GET', url: '/api/v1/health' })
+    const response = await app.inject({ method: 'GET', url: '/api/v1/missing' })
 
     expect(response.statusCode).toBe(404)
+    expect(response.json()).toMatchObject({ code: 'NOT_FOUND' })
     expect(app.config.db.name).toBe('tendi_family_dev')
     expect(app.config.allowedStaffTypes).toEqual(['admin', 'office'])
   })

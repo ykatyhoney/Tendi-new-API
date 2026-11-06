@@ -1,7 +1,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { assertAllowedDatabase, assertLocalHost, databaseNameForTarget } from '../../src/lib/database-target.js'
+import {
+  assertAllowedDatabase,
+  assertFamilyDatabase,
+  assertLocalHost,
+  databaseNameForTarget,
+} from '../../src/lib/database-target.js'
 import {
   ADDITIONAL_UPDATE_COLUMNS,
   ADMIN_READ_COLUMNS,
@@ -28,6 +33,9 @@ describe('database targets', () => {
     expect(() => assertLocalHost('10.0.0.8')).toThrow(/127\.0\.0\.1 and localhost/)
     expect(() => assertAllowedDatabase('tendi_final')).toThrow(/Refusing database/)
     expect(() => assertAllowedDatabase('tendi_family_dev')).not.toThrow()
+    expect(() => assertFamilyDatabase('tendi_family_dev')).not.toThrow()
+    expect(() => assertFamilyDatabase('tendi_family_test')).not.toThrow()
+    expect(() => assertFamilyDatabase('tendi_family_schema_ref')).toThrow(/only allows/)
   })
 })
 
@@ -48,6 +56,11 @@ describe('family_api grants', () => {
     expect(sql).toContain("'family_api'@'127.0.0.1'")
     expect(sql).toContain('GRANT INSERT ON `tendi_family_dev`.`audit_logs`')
     expect(sql).toContain('GRANT SELECT ON `tendi_family_dev`.`family_mirror_lock_log`')
+    expect(sql).toContain(
+      'GRANT UPDATE (`last_seen_at`) ON `tendi_family_dev`.`admin_api_tokens` TO \'family_api\'@\'localhost\'',
+    )
+    expect(sql).not.toMatch(/INSERT ON `tendi_family_dev`\.`admin_api_tokens`/)
+    expect(sql).not.toMatch(/DELETE ON `tendi_family_dev`\.`admin_api_tokens`/)
   })
 })
 

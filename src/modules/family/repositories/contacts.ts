@@ -1,0 +1,216 @@
+import type { Pool, RowDataPacket } from 'mysql2/promise'
+import { likeContains } from '../../../lib/like.js'
+import { phoneSearchKey } from '../../../lib/phone.js'
+import { contactIdsForPhone } from './phones.js'
+import { placeholders, rows } from './query.js'
+
+export interface ContactRow extends RowDataPacket {
+  id: number
+  fname: string
+  lname: string
+  legacyFullName: string
+  hebrewName: string
+  occupation: string
+  employer: string
+  note: string | null
+}
+
+export interface PhoneRow extends RowDataPacket {
+  id: number
+  contactId: number
+  phone: string
+  type: 'mobile' | 'home' | 'work' | 'other'
+  typeLabel: string | null
+  channel: 'none' | 'sms' | 'voice' | 'both'
+  isPrimary: number
+  sortOrder: number
+}
+
+export interface EmailRow extends RowDataPacket {
+  id: number
+  contactId: number
+  email: string
+  type: 'personal' | 'work' | 'other'
+  typeLabel: string | null
+  isPrimary: number
+  sortOrder: number
+}
+
+export interface AddressRow extends RowDataPacket {
+  id: number
+  contactId: number
+  type: 'home' | 'work' | 'billing' | 'other'
+  typeLabel: string | null
+  line1: string
+  line2: string
+  city: string
+  state: string
+  zip: string
+  isPrimary: number
+}
+
+export interface HouseholdRow extends RowDataPacket {
+  contactId: number
+  familyId: number
+  familyName: string
+  familyStatus: 'active' | 'trash'
+  memberId: number
+  relationship: string
+  relationshipLabel: string
+  isPrimary: number
+  sortOrder: number
+}
+
+interface IdRow extends RowDataPacket {
+  id: number
+}
+
+export async function searchContactIds(db: Pool, query: string): Promise<number[] | 'all'> {
+  const q = query.trim()
+  if (q.length === 0) {
+    return 'all'
+  }
+  const ids = new Set<number>()
+  const like = likeContains(q)
+  const byName = await rows<IdRow>(
+    db,
+    `SELECT id FROM family_contacts
+     WHERE status = 'active'
+       AND (fname LIKE ? ESCAPE '\\\\' OR lname LIKE ? ESCAPE '\\\\' OR legacy_full_name LIKE ? ESCAPE '\\\\')`,
+    [like, like, like],
+  )
+  for (const row of byName) {
+    ids.add(Number(row.id))
+  }
+  const phoneKey = phoneSearchKey(q)
+  if (phoneKey !== null) {
+    const active = await activeContactIds(db, await contactIdsForPhone(db, phoneKey))
+    for (const id of active) {
+      ids.add(id)
+    }
+  }
+  return [...ids]
+}
+
+async function activeContactIds(db: Pool, contactIds: readonly number[]): Promise<number[]> {
+  if (contactIds.length === 0) {
+    return []
+  }
+  const found = await rows<IdRow>(
+    db,
+    `SELECT id FROM family_contacts WHERE status = 'active' AND id IN (${placeholders(contactIds.length)})`,
+    contactIds,
+  )
+  return found.map((row) => Number(row.id))
+}
+
+export async function pageContacts(
+  db: Pool,
+  ids: readonly number[] | 'all',
+  page: number,
+  pageSize: number,
+): Promise<{ total: number; contacts: ContactRow[] }> {
+  const offset = (page - 1) * pageSize
+  const columns = `id, fname, lname, legacy_full_name AS legacyFullName, hebrew_name AS hebrewName,
+                   occupation, employer, note`
+  if (ids === 'all') {
+    const totals = await rows<RowDataPacket>(
+      db,
+      `SELECT COUNT(*) AS total FROM family_contacts WHERE status = 'active'`,
+    )
+    const contacts = await rows<ContactRow>(
+      db,
+      `SELECT ${columns} FROM family_contacts WHERE status = 'active' ORDER BY lname, fname, id LIMIT ? OFFSET ?`,
+      [pageSize, offset],
+    )
+    return { total: Number(totals[0]?.['total'] ?? 0), contacts }
+  }
+  if (ids.length === 0) {
+    return { total: 0, contacts: [] }
+  }
+  const contacts = await rows<ContactRow>(
+    db,
+    `SELECT ${columns}
+     FROM family_contacts
+     WHERE status = 'active' AND id IN (${placeholders(ids.length)})
+     ORDER BY lname, fname, id
+     LIMIT ? OFFSET ?`,
+    [...ids, pageSize, offset],
+  )
+  return { total: ids.length, contacts }
+}
+
+export async function findActiveContact(db: Pool, id: number): Promise<ContactRow | null> {
+  const found = await rows<ContactRow>(
+    db,
+    `SELECT id, fname, lname, legacy_full_name AS legacyFullName, hebrew_name AS hebrewName,
+            occupation, employer, note
+     FROM family_contacts
+     WHERE id = ? AND status = 'active'`,
+    [id],
+  )
+  return found[0] ?? null
+}
+
+export async function listPhones(db: Pool, contactIds: readonly number[]): Promise<PhoneRow[]> {
+  if (contactIds.length === 0) {
+    return []
+  }
+  return rows<PhoneRow>(
+    db,
+    `SELECT id, family_contact_id AS contactId, phone, type, type_label AS typeLabel, channel,
+            is_primary AS isPrimary, sort_order AS sortOrder
+     FROM family_contact_phones
+     WHERE family_contact_id IN (${placeholders(contactIds.length)})
+     ORDER BY family_contact_id, is_primary DESC, sort_order, id`,
+    contactIds,
+  )
+}
+
+export async function listEmails(db: Pool, contactIds: readonly number[]): Promise<EmailRow[]> {
+  if (contactIds.length === 0) {
+    return []
+  }
+  return rows<EmailRow>(
+    db,
+    `SELECT id, family_contact_id AS contactId, email, type, type_label AS typeLabel,
+            is_primary AS isPrimary, sort_order AS sortOrder
+     FROM family_contact_emails
+     WHERE family_contact_id IN (${placeholders(contactIds.length)})
+     ORDER BY family_contact_id, is_primary DESC, sort_order, id`,
+    contactIds,
+  )
+}
+
+export async function listAddresses(db: Pool, contactIds: readonly number[]): Promise<AddressRow[]> {
+  if (contactIds.length === 0) {
+    return []
+  }
+  return rows<AddressRow>(
+    db,
+    `SELECT id, family_contact_id AS contactId, type, type_label AS typeLabel,
+            line1, line2, city, state, zip, is_primary AS isPrimary
+     FROM family_contact_addresses
+     WHERE family_contact_id IN (${placeholders(contactIds.length)})
+     ORDER BY family_contact_id, is_primary DESC, id`,
+    contactIds,
+  )
+}
+
+export async function listHouseholds(db: Pool, contactIds: readonly number[]): Promise<HouseholdRow[]> {
+  if (contactIds.length === 0) {
+    return []
+  }
+  return rows<HouseholdRow>(
+    db,
+    `SELECT m.family_contact_id AS contactId, f.id AS familyId, f.name AS familyName, f.status AS familyStatus,
+            m.id AS memberId, m.relationship, rt.label AS relationshipLabel,
+            m.is_primary AS isPrimary, m.sort_order AS sortOrder
+     FROM family_members AS m
+     INNER JOIN families AS f ON f.id = m.family_id
+     INNER JOIN relationship_types AS rt ON rt.code = m.relationship
+     WHERE m.status = 'active' AND m.family_contact_id IN (${placeholders(contactIds.length)})
+     ORDER BY m.family_contact_id, f.name, m.id`,
+    contactIds,
+  )
+}

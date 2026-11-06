@@ -38,6 +38,15 @@ export function loadAdminConfig(): AdminConfig {
   return { host, port, user, password, familyPassword, clientPath }
 }
 
+export function loadDatabaseName(): string {
+  const file = readDotEnv('.env')
+  const name = process.env['DB_NAME'] || file['DB_NAME'] || ''
+  if (!name) {
+    throw new Error('Set DB_NAME in .env.')
+  }
+  return name
+}
+
 function readDotEnv(path: string): Record<string, string> {
   try {
     const parsed: Record<string, string> = {}
