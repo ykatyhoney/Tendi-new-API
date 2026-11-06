@@ -1,3 +1,0 @@
-# Migration checksums are SHA-1 of the file bytes, so keep LF on every machine.
-*.sql text eol=lf
-*.sh text eol=lf
