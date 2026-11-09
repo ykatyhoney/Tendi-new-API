@@ -166,7 +166,8 @@ describe('family writes', () => {
     })
     expect(added.statusCode).toBe(200)
     const father = added.json().family.members[0]
-    expect(father.contact.legacyFullName).toBe('B6 Father')
+    // A new contact stores the legacy format: the first name only.
+    expect(father.contact.legacyFullName).toBe('B6')
     expect(father.isPrimary).toBe(true)
     createdContacts.push(father.contact.id)
     const memberId = father.id
@@ -251,7 +252,7 @@ describe('family writes', () => {
     expect(missingMember.statusCode).toBe(404)
   })
 
-  it('replaces phones, emails, and addresses, and keeps legacy names until a name changes', async () => {
+  it('replaces phones, emails, and addresses, and keeps a legacy name that is in neither format', async () => {
     const created = await postFamily('B6 Channels')
     createdFamilies.push(created.family.id)
     const added = await app.inject({
@@ -282,7 +283,9 @@ describe('family writes', () => {
       payload: { fname: 'B6b' },
     })
     expect(renamed.statusCode).toBe(200)
-    expect(renamed.json().contact.legacyFullName).toBe('B6b Named')
+    // 'Kept Name' is neither the first name nor "fname lname", so a name change leaves it as it is.
+    expect(renamed.json().contact.fname).toBe('B6b')
+    expect(renamed.json().contact.legacyFullName).toBe('Kept Name')
 
     const twoPrimaries = await app.inject({
       method: 'PUT',
@@ -493,9 +496,11 @@ describe('family writes', () => {
       headers: auth,
       payload: { phones: [{ phone: '1'.repeat(31), type: 'home', isPrimary: true }] },
     })
-    expect(tooLong.statusCode).toBe(409)
-    expect(tooLong.json().code).toBe('VALUE_TOO_LONG')
-    expect(['father_home_phone', 'mother_home_phone']).toContain(tooLong.json().details.column)
+    // F3: a phone longer than the 30-character *_home_phone / *_office_phone columns is refused by the schema
+    // before the save starts (it used to reach the mirror and roll back with 409 VALUE_TOO_LONG).
+    expect(tooLong.statusCode).toBe(400)
+    expect(tooLong.json().code).toBe('VALIDATION')
+    expect(tooLong.json().details.map((detail: { path: string }) => detail.path)).toContain('/phones/0/phone')
     expect(await phoneRows(sample.contactId)).toEqual(beforePhones)
     expect(await childPhones(sample.familyId)).toEqual(beforeChildren)
 

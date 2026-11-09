@@ -2,6 +2,7 @@ import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
 import { childParams } from '../schemas/family.js'
 import {
   familyChildParams,
+  linkBody,
   linkPreview,
   linkResult,
   replaceRightsBody,
@@ -45,10 +46,14 @@ const linkRoutes: FastifyPluginAsyncTypebox = async (app) => {
       schema: {
         operationId: 'linkChild',
         params: familyChildParams,
+        body: linkBody,
         response: { 200: linkResult },
       },
     },
-    async (request) => linkChild(app.db, staffId(request), request.params.id, request.params.childId),
+    async (request) =>
+      linkChild(app.db, staffId(request), request.params.id, request.params.childId, {
+        allowEmptyParents: request.body?.allowEmptyParents === true,
+      }),
   )
 
   app.post(

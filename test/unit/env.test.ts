@@ -132,3 +132,14 @@ describe('configWarnings', () => {
     expect(configWarnings(config)).toEqual([])
   })
 })
+
+describe('logic fixes: staff types', () => {
+  it('F11 lowercases and trims ALLOWED_STAFF_TYPES and RELATIONSHIP_ADMIN_TYPES', async () => {
+    const config = await loadConfig({
+      ...isolated,
+      data: { ALLOWED_STAFF_TYPES: ' Admin , office , SuperAdmin', RELATIONSHIP_ADMIN_TYPES: ' ADMIN , SuperAdmin ' },
+    })
+    expect(config.allowedStaffTypes).toEqual(['admin', 'office', 'superadmin'])
+    expect(config.relationshipAdminTypes).toEqual(['admin', 'superadmin'])
+  })
+})

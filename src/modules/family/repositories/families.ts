@@ -1,8 +1,8 @@
 import type { RowDataPacket } from 'mysql2/promise'
 import { likeContains } from '../../../lib/like.js'
 import type { RecordStatus } from '../schemas/common.js'
-import { normalizedPhoneSql, phoneSearchKey } from '../../../lib/phone.js'
-import { PHONE_LOOKUP_SQL } from './phones.js'
+import { normalizedPhoneSql, phoneSearch, phoneSearchParam } from '../../../lib/phone.js'
+import { phoneLookup } from './phones.js'
 import { placeholders, rows, unionOf, type SearchMatch, type Sql } from './query.js'
 
 export interface FamilyRow extends RowDataPacket {
@@ -50,22 +50,22 @@ function familyMatch(query: string): SearchMatch | null {
       params: [like, like, like],
     },
   ]
-  const phoneKey = phoneSearchKey(q)
-  if (phoneKey !== null) {
+  const phone = phoneSearch(q)
+  if (phone !== null) {
+    const lookup = phoneLookup(phone)
     branches.push(
       {
         sql: `SELECT m.family_id AS id
               FROM family_members AS m
               INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
-              WHERE m.status = 'active' AND m.family_contact_id IN (${PHONE_LOOKUP_SQL})`,
-        params: [phoneKey],
+              WHERE m.status = 'active' AND m.family_contact_id IN (${lookup.sql})`,
+        params: lookup.params,
       },
       {
         sql: `SELECT f.id AS id
               FROM families AS f
-              WHERE ${normalizedPhoneSql('f.household_phone')} = ?
-                 OR (CHAR_LENGTH(?) < 10 AND REGEXP_REPLACE(REGEXP_REPLACE(f.household_phone, '(?i)(ext\\\\.?|x|#).*$', ''), '[^0-9]', '') = ?)`,
-        params: [phoneKey, phoneKey, phoneKey],
+              WHERE ${normalizedPhoneSql('f.household_phone')} ${phone.kind === 'exact' ? '=' : 'LIKE'} ?`,
+        params: [phoneSearchParam(phone)],
       },
     )
   }

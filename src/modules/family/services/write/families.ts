@@ -14,7 +14,14 @@ import { getFamily } from '../families.js'
 import { affectedChildIdsForFamily } from '../mirror/affected.js'
 import { writeMirror } from '../mirror/write.js'
 import { auditValue, columnChanges, familyIdsForContact, insertId, lockFamilies, writeAudit } from './audit.js'
-import { contactNames, legacyFullName, requireChange } from './rules.js'
+import {
+  activeMembers,
+  deleteMemberRights,
+  ensureMainContact,
+  parentSlotCount,
+  refuseEmptyParents,
+} from './household.js'
+import { contactNames, newLegacyFullName, requireChange } from './rules.js'
 
 interface FamilyRecord extends RowDataPacket {
   id: number
@@ -127,6 +134,8 @@ export async function createMember(
     if (body.isPrimary === true) {
       await clearOtherPrimaries(connection, staffId, familyId, memberId)
     }
+    // The first active member of a household becomes its main contact.
+    await ensureMainContact(connection, staffId, familyId)
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
     return finishFamily(connection, familyId, affected)
   })
@@ -147,8 +156,16 @@ export async function patchMember(
       throw new ApiError(404, 'NOT_FOUND', 'Family not found')
     }
     const member = await loadActiveMember(connection, familyId, memberId)
-    if (body.relationship !== undefined) {
+    // Only a new relationship must be active: a member keeps a type that was deactivated after it was given.
+    const relationshipChanges = body.relationship !== undefined && body.relationship !== member.relationship
+    if (relationshipChanges && body.relationship !== undefined) {
       await requireActiveRelationship(connection, body.relationship)
+    }
+    const linked = relationshipChanges ? await affectedChildIdsForFamily(connection, familyId) : []
+    const slotsBefore = relationshipChanges ? await parentSlotCount(connection, familyId) : 0
+    const demotingMain = body.isPrimary === false && Number(member.isPrimary) === 1
+    if (demotingMain && (await activeMembers(connection, familyId)).length <= 1) {
+      throw new ApiError(409, 'MAIN_CONTACT_REQUIRED', 'A household with members needs a main contact.')
     }
     const next = {
       relationship: body.relationship ?? member.relationship,
@@ -176,6 +193,11 @@ export async function patchMember(
       )
       await writeAudit(connection, staffId, changes)
     }
+    // Demoting the main contact promotes the next member, never this one again.
+    await ensureMainContact(connection, staffId, familyId, demotingMain ? memberId : undefined)
+    if (relationshipChanges) {
+      await refuseEmptyParents(connection, familyId, linked, slotsBefore, body.allowEmptyParents === true)
+    }
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
     return finishFamily(connection, familyId, affected)
   })
@@ -186,6 +208,7 @@ export async function deleteMember(
   staffId: number,
   familyId: number,
   memberId: number,
+  options: { allowEmptyParents?: boolean } = {},
 ): Promise<FamilyWriteResult> {
   return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
@@ -194,6 +217,15 @@ export async function deleteMember(
       throw new ApiError(404, 'NOT_FOUND', 'Family not found')
     }
     const member = await loadActiveMember(connection, familyId, memberId)
+    const linked = await affectedChildIdsForFamily(connection, familyId)
+    const before = await activeMembers(connection, familyId)
+    // Link needs an active member, so a family with linked children keeps one (the same 409 as trashing it).
+    if (linked.length > 0 && before.every((row) => row.id === memberId)) {
+      throw new ApiError(409, 'HAS_LINKED_CHILDREN', `Unlink this family's children before removing its last member.`, {
+        childIds: linked,
+      })
+    }
+    const slotsBefore = before.filter((row) => row.slot !== null).length
     await connection.query(`UPDATE family_members SET status = 'trash', is_primary = 0 WHERE id = ?`, [memberId])
     await writeAudit(connection, staffId, [
       {
@@ -217,6 +249,12 @@ export async function deleteMember(
           ]
         : []),
     ])
+    // A member who is added back later starts with no rights for the family's children.
+    await deleteMemberRights(connection, staffId, memberId)
+    if (Number(member.isPrimary) === 1) {
+      await ensureMainContact(connection, staffId, familyId)
+    }
+    await refuseEmptyParents(connection, familyId, linked, slotsBefore, options.allowEmptyParents === true)
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
     return finishFamily(connection, familyId, affected)
   })
@@ -264,13 +302,17 @@ async function loadActiveMember(
   return member
 }
 
+/**
+ * A share lock on the type row: a deactivation (FOR UPDATE in relationship-types.ts) waits for this save to
+ * commit, or this save waits for the deactivation and then sees it. Either way no new member gets an inactive type.
+ */
 async function requireActiveRelationship(connection: PoolConnection, code: string): Promise<void> {
   const found = await rows<RowDataPacket>(
     connection,
-    `SELECT code FROM relationship_types WHERE code = ? AND status = 'active'`,
+    `SELECT code, status FROM relationship_types WHERE code = ? LOCK IN SHARE MODE`,
     [code],
   )
-  if (found.length === 0) {
+  if (found[0]?.['status'] !== 'active') {
     throw new ApiError(400, 'UNKNOWN_RELATIONSHIP', 'That relationship is not an active relationship type.')
   }
 }
@@ -303,7 +345,8 @@ async function insertContact(
   const occupation = contact.occupation ?? ''
   const employer = contact.employer ?? ''
   const note = contact.note ?? null
-  const legacy = legacyFullName(fname, lname)
+  // The legacy format: the first name only, as the legacy app keeps father_name and mother_name.
+  const legacy = newLegacyFullName(fname, lname)
   const contactId = await insertId(
     connection,
     `INSERT INTO family_contacts

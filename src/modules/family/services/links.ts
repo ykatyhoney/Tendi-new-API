@@ -4,11 +4,12 @@ import { withStaffTransaction } from '../../../lib/with-transaction.js'
 import { rows } from '../repositories/query.js'
 import type { LinkPreview, LinkResult, ReplaceRightsBody, RightsResult, UnlinkResult } from '../schemas/link.js'
 import { auditValue, columnChanges, insertId, lockFamilies, writeAudit, type AuditChange } from './write/audit.js'
-import { characterLength, deriveLegacyValues, legacyColumnValue, sameLegacyValue } from './mirror/derive.js'
+import { characterLength, deriveLegacyValues, legacyColumnValue, sameLegacyValue, valueAfterMirror } from './mirror/derive.js'
 import { legacyColumnLengths } from './mirror/lengths.js'
 import { loadStoredChild, loadTargetFamily } from './mirror/load.js'
 import { affectedChildIdsForFamily } from './mirror/affected.js'
 import { writeMirror } from './mirror/write.js'
+import { noParentSlot, parentSlotCount } from './write/household.js'
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from './mirror/types.js'
 
 const CHILD_COLUMNS = new Set<string>(CHILDREN_MIRROR_COLUMNS)
@@ -48,15 +49,18 @@ export async function previewLink(pool: Pool, familyId: number, childId: number)
   const lengths = await legacyColumnLengths(pool)
   const columns = [...CHILDREN_MIRROR_COLUMNS, ...ADDITIONAL_MIRROR_COLUMNS].map((column) => {
     const today = legacyColumnValue(child.stored, column)
-    const next = legacyColumnValue(after, column)
+    const derived = legacyColumnValue(after, column)
+    const inChildren = CHILD_COLUMNS.has(column)
+    // Exactly what link will store: '' stays '' where the derived empty value is NULL, and the reverse.
+    const next = valueAfterMirror(today, derived, !inChildren && !child.hasAdditional)
     const max = lengths.get(column)
     return {
       column,
-      table: CHILD_COLUMNS.has(column) ? ('children' as const) : ('children_additional_information' as const),
+      table: inChildren ? ('children' as const) : ('children_additional_information' as const),
       today,
       after: next,
-      changed: !sameLegacyValue(today, next),
-      tooLong: typeof next === 'string' && max !== undefined && characterLength(next) > max,
+      changed: !sameLegacyValue(today, derived),
+      tooLong: typeof derived === 'string' && max !== undefined && characterLength(derived) > max,
     }
   })
   return {
@@ -67,7 +71,13 @@ export async function previewLink(pool: Pool, familyId: number, childId: number)
   }
 }
 
-export async function linkChild(pool: Pool, staffId: number, familyId: number, childId: number): Promise<LinkResult> {
+export async function linkChild(
+  pool: Pool,
+  staffId: number,
+  familyId: number,
+  childId: number,
+  options: { allowEmptyParents?: boolean } = {},
+): Promise<LinkResult> {
   const affected = await withStaffTransaction(pool, staffId, async (connection) => {
     const child = await lockChildForLink(connection, familyId, childId)
     const members = await activeMemberIds(connection, familyId)
@@ -76,6 +86,10 @@ export async function linkChild(pool: Pool, staffId: number, familyId: number, c
     }
     if (child.familyId !== null && child.familyId !== familyId) {
       throw new ApiError(409, 'ALREADY_LINKED', 'This child is linked to another family.', { familyId: child.familyId })
+    }
+    // A relink to the same family changes nothing, so only a new link is refused.
+    if (child.familyId !== familyId && options.allowEmptyParents !== true && (await parentSlotCount(connection, familyId)) === 0) {
+      throw noParentSlot([childId])
     }
     await connection.query('SET @family_mirror = 1')
     if (child.familyId !== familyId) {

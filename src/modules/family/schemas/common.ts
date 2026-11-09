@@ -1,4 +1,5 @@
 import { Type } from '@fastify/type-provider-typebox'
+import { OLD_COLUMN_LIMITS } from './limits.js'
 
 /*
  * Shapes used by more than one resource. Each enum matches the column's ENUM in tendi_family_module.sql.
@@ -78,15 +79,28 @@ export const address = Type.Object(
 /** A new contact's fields. The service trims names and requires a first or last name. */
 export const newContact = Type.Object(
   {
-    fname: Type.String({ maxLength: 100 }),
-    lname: Type.String({ maxLength: 100 }),
+    fname: Type.String({ maxLength: OLD_COLUMN_LIMITS.name }),
+    lname: Type.String({ maxLength: OLD_COLUMN_LIMITS.name }),
     hebrewName: Type.Optional(Type.String({ maxLength: 255 })),
-    occupation: Type.Optional(Type.String({ maxLength: 150 })),
-    employer: Type.Optional(Type.String({ maxLength: 150 })),
+    occupation: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.occupation })),
+    employer: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.employer })),
     note: Type.Optional(Type.Union([Type.String({ maxLength: 20000 }), Type.Null()])),
   },
   { additionalProperties: false },
 )
+
+/**
+ * Optional body of a member removal or a link. allowEmptyParents saves even when the linked children would be
+ * left with no member in the father or mother slot (otherwise 409 NO_PARENT_SLOT). No body is the same as {}.
+ */
+export const emptyParentsOption = Type.Boolean({
+  description: 'Save even if the linked children are left with both parent slots empty (otherwise 409 NO_PARENT_SLOT).',
+})
+
+export const emptyParentsBody = Type.Union([
+  Type.Object({ allowEmptyParents: Type.Optional(emptyParentsOption) }, { additionalProperties: false }),
+  Type.Null(),
+])
 
 export const searchQuery = Type.Object({
   q: Type.Optional(Type.String({ maxLength: 100 })),
@@ -105,3 +119,4 @@ export type EmailOutput = Type.Static<typeof email>
 export type AddressOutput = Type.Static<typeof address>
 export type NewContact = Type.Static<typeof newContact>
 export type SearchQuery = Type.Static<typeof searchQuery>
+export type EmptyParentsBody = Type.Static<typeof emptyParentsBody>

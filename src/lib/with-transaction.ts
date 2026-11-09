@@ -20,8 +20,8 @@ export function isDeadlock(error: unknown): boolean {
  * already replaced. At READ COMMITTED every statement reads the latest committed rows, and the row
  * locks taken with FOR UPDATE keep two saves of one family in order.
  *
- * If the session variables cannot be cleared, the connection is destroyed rather than released, so a
- * connection with @family_mirror still set never reaches another request.
+ * If ROLLBACK fails, or the session variables cannot be cleared, the connection is destroyed rather than
+ * released, so a connection with an open transaction or @family_mirror still set never reaches another request.
  */
 export async function withTransaction<T>(
   pool: Pool,
@@ -41,7 +41,8 @@ export async function withTransaction<T>(
       try {
         await connection.rollback()
       } catch {
-        // A deadlock can leave the connection unable to roll back.
+        // A connection whose transaction could not be closed is never reused, even if the reset below works.
+        reusable = false
       }
       if (isDeadlock(error) && attempt === 0) {
         attempt += 1
@@ -49,10 +50,12 @@ export async function withTransaction<T>(
       }
       throw error
     } finally {
-      try {
-        await connection.query('SET @family_mirror = NULL, @audit_user = NULL')
-      } catch {
-        reusable = false
+      if (reusable) {
+        try {
+          await connection.query('SET @family_mirror = NULL, @audit_user = NULL')
+        } catch {
+          reusable = false
+        }
       }
       if (reusable) {
         connection.release()

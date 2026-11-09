@@ -89,3 +89,32 @@ describe('withTransaction', () => {
     expect(connections[0]?.statements).toContain('SET @audit_user = ?')
   })
 })
+
+describe('logic fixes: withTransaction', () => {
+  it('F15 destroys the connection instead of releasing it when ROLLBACK fails', async () => {
+    const state = { released: false, destroyed: false }
+    const connection = {
+      async query() {
+        return [[], []]
+      },
+      async beginTransaction() {},
+      async commit() {},
+      async rollback() {
+        throw new Error('rollback refused')
+      },
+      release() {
+        state.released = true
+      },
+      destroy() {
+        state.destroyed = true
+      },
+    }
+    const pool = { getConnection: async () => connection as unknown as PoolConnection } as unknown as Pool
+    await expect(
+      withTransaction(pool, async () => {
+        throw new Error('work failed')
+      }),
+    ).rejects.toThrow('work failed')
+    expect(state).toEqual({ released: false, destroyed: true })
+  })
+})

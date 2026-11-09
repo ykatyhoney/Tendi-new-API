@@ -1,8 +1,8 @@
 import type { RowDataPacket } from 'mysql2/promise'
 import { likeContains } from '../../../lib/like.js'
 import type { AddressType, EmailType, PhoneChannel, PhoneType, RecordStatus } from '../schemas/common.js'
-import { phoneSearchKey } from '../../../lib/phone.js'
-import { PHONE_LOOKUP_SQL } from './phones.js'
+import { phoneSearch } from '../../../lib/phone.js'
+import { phoneLookup } from './phones.js'
 import { placeholders, rows, unionOf, type SearchMatch, type Sql } from './query.js'
 
 export interface ContactRow extends RowDataPacket {
@@ -76,9 +76,9 @@ function contactMatch(query: string): SearchMatch | null {
       params: [like, like, like],
     },
   ]
-  const phoneKey = phoneSearchKey(q)
-  if (phoneKey !== null) {
-    branches.push({ sql: PHONE_LOOKUP_SQL, params: [phoneKey] })
+  const phone = phoneSearch(q)
+  if (phone !== null) {
+    branches.push(phoneLookup(phone))
   }
   return unionOf(branches)
 }
@@ -167,7 +167,12 @@ export async function listAddresses(db: Sql, contactIds: readonly number[]): Pro
   )
 }
 
-export async function listHouseholds(db: Sql, contactIds: readonly number[]): Promise<HouseholdRow[]> {
+/** A contact's households. The search summary passes activeOnly; the contact detail shows trashed ones with their status. */
+export async function listHouseholds(
+  db: Sql,
+  contactIds: readonly number[],
+  options: { activeOnly?: boolean } = {},
+): Promise<HouseholdRow[]> {
   if (contactIds.length === 0) {
     return []
   }
@@ -180,6 +185,7 @@ export async function listHouseholds(db: Sql, contactIds: readonly number[]): Pr
      INNER JOIN families AS f ON f.id = m.family_id
      INNER JOIN relationship_types AS rt ON rt.code = m.relationship
      WHERE m.status = 'active' AND m.family_contact_id IN (${placeholders(contactIds.length)})
+       ${options.activeOnly === true ? "AND f.status = 'active'" : ''}
      ORDER BY m.family_contact_id, f.name, m.id`,
     contactIds,
   )

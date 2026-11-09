@@ -30,10 +30,18 @@ declare module 'fastify' {
   }
 }
 
+/** Staff types are compared lowercased and trimmed, on both the configured lists and admin.type. */
+export function staffType(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
 /** last_seen_at is refreshed when it is older than this. */
 const LAST_SEEN_INTERVAL_SECONDS = 60
 
 const authPlugin: FastifyPluginAsync = async (app) => {
+  const allowedStaffTypes = new Set(app.config.allowedStaffTypes.map(staffType))
+  const relationshipAdminTypes = new Set(app.config.relationshipAdminTypes.map(staffType))
+
   app.decorate('authenticate', async (request: FastifyRequest) => {
     const token = readBearerToken(request.headers.authorization)
     if (token === undefined) {
@@ -55,13 +63,14 @@ const authPlugin: FastifyPluginAsync = async (app) => {
     if (row.status !== 'active') {
       throw new ApiError(401, 'UNAUTHORIZED', 'This account is not active')
     }
-    if (row.type === null || !app.config.allowedStaffTypes.includes(row.type)) {
+    const type = staffType(row.type)
+    if (type.length === 0 || !allowedStaffTypes.has(type)) {
       throw new ApiError(403, 'FORBIDDEN', 'This staff type cannot use the Family API')
     }
 
     const staff: Staff = {
       adminId: Number(row.adminId),
-      type: row.type,
+      type,
       name: `${row.fname} ${row.lname}`.trim(),
     }
     request.staff = staff
@@ -86,7 +95,7 @@ const authPlugin: FastifyPluginAsync = async (app) => {
     if (staff === undefined) {
       throw new ApiError(401, 'UNAUTHORIZED', 'A staff bearer token is required')
     }
-    if (!app.config.relationshipAdminTypes.includes(staff.type)) {
+    if (!relationshipAdminTypes.has(staffType(staff.type))) {
       throw new ApiError(403, 'FORBIDDEN', 'This action is limited to relationship admins')
     }
   })

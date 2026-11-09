@@ -11,6 +11,7 @@ import {
   searchQuery,
   sortOrder,
 } from './common.js'
+import { OLD_COLUMN_LIMITS } from './limits.js'
 
 const contactPhone = Type.Object(
   {
@@ -88,11 +89,11 @@ export const contactParams = Type.Object({
 
 export const patchContactBody = Type.Object(
   {
-    fname: Type.Optional(Type.String({ maxLength: 100 })),
-    lname: Type.Optional(Type.String({ maxLength: 100 })),
+    fname: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.name })),
+    lname: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.name })),
     hebrewName: Type.Optional(Type.String({ maxLength: 255 })),
-    occupation: Type.Optional(Type.String({ maxLength: 150 })),
-    employer: Type.Optional(Type.String({ maxLength: 150 })),
+    occupation: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.occupation })),
+    employer: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.employer })),
     note: Type.Optional(Type.Union([Type.String({ maxLength: 20000 }), Type.Null()])),
   },
   { additionalProperties: false },
@@ -102,7 +103,7 @@ const phoneInput = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
-    phone: Type.String({ minLength: 1, maxLength: 255 }),
+    phone: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.phone }),
     type: Type.Optional(phoneType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     channel: Type.Optional(phoneChannel),
@@ -116,7 +117,7 @@ const emailInput = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
-    email: Type.String({ minLength: 1, maxLength: 255 }),
+    email: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.email }),
     type: Type.Optional(emailType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     isPrimary: Type.Optional(Type.Boolean()),

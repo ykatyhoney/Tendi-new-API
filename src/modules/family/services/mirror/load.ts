@@ -188,7 +188,7 @@ export async function loadTargetFamily(db: Sql, familyId: number, childId: numbe
   return assembleFamily(db, familyId, stringValue(family['householdPhone']), childId, memberRows)
 }
 
-/** Today's 28 stored values. Notification blanks are read the same way the mirror compares them. */
+/** Today's 28 stored values, as stored (a NULL notification method stays NULL). */
 export async function loadStoredChild(db: Sql, childId: number): Promise<StoredChild | null> {
   const found = await rows<ChildRow & RowDataPacket>(
     db,
@@ -342,8 +342,10 @@ function storedValues(row: ChildRow): LegacyValues {
     if (column.startsWith('use_')) {
       values[column] = Number(row[column]) === 1 ? 1 : 0
     } else if (column.startsWith('notification_')) {
-      const method = row[column]
-      values[column] = method === 'sms' || method === 'both' ? method : 'voice'
+      // The raw stored value. A NULL is not 'voice': it differs from the derived method, so the mirror writes it
+      // and reconcile and the preview show it.
+      const method: unknown = row[column]
+      values[column] = method === null || method === undefined ? null : String(method)
     } else {
       values[column] = stringValue(row[column])
     }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/lib/api-error.js'
-import { assertLegacyLengths, deriveLegacyValues } from '../../src/modules/family/services/mirror/derive.js'
+import { assertLegacyLengths, deriveLegacyValues, valueAfterMirror } from '../../src/modules/family/services/mirror/derive.js'
 import type {
   MirrorContact,
   MirrorFamily,
@@ -109,6 +109,23 @@ describe('deriveLegacyValues', () => {
     })
     const other = mother({ id: 4, payment: false })
     expect(deriveLegacyValues(child, family([other, main])).parent_email).toBe('main@example.invalid')
+  })
+
+  it('F17 falls back to the main contact when the payer has no primary email', () => {
+    const payer = mother({ id: 2, payment: true, isPrimary: false, emails: [] })
+    const main = father({
+      id: 1,
+      isPrimary: true,
+      emails: [{ id: 1, email: 'main17@example.invalid', isPrimary: true, sortOrder: 0 }],
+    })
+    expect(deriveLegacyValues(child, family([payer, main])).parent_email).toBe('main17@example.invalid')
+    const payerWithEmail = mother({
+      id: 2,
+      payment: true,
+      isPrimary: false,
+      emails: [{ id: 2, email: 'payer17@example.invalid', isPrimary: true, sortOrder: 0 }],
+    })
+    expect(deriveLegacyValues(child, family([payerWithEmail, main])).parent_email).toBe('payer17@example.invalid')
   })
 
   it('uses the household of the family being derived when a contact is in two households', () => {
@@ -289,3 +306,17 @@ function work(phone: string, extra: Partial<MirrorPhone> = {}): MirrorPhone {
 function other(label: string, phone: string): MirrorPhone {
   return { id: 4, phone, type: 'other', typeLabel: label, isPrimary: false, sortOrder: 0 }
 }
+
+describe('valueAfterMirror', () => {
+  it('keeps the stored value when it equals the derived one, so a stored empty string stays empty', () => {
+    expect(valueAfterMirror('', null)).toBe('')
+    expect(valueAfterMirror(null, '')).toBeNull()
+    expect(valueAfterMirror('voice', 'voice')).toBe('voice')
+    expect(valueAfterMirror(null, 'voice')).toBe('voice')
+    expect(valueAfterMirror('Old', 'New')).toBe('New')
+  })
+
+  it('gives the derived value when the row is inserted', () => {
+    expect(valueAfterMirror('', null, true)).toBeNull()
+  })
+})

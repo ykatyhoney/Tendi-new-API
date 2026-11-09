@@ -99,7 +99,7 @@ describe('review fixes against MariaDB', () => {
     expect(padded.statusCode).toBe(200)
     const contact = padded.json().family.members[0].contact
     createdContacts.push(Number(contact.id))
-    expect(contact).toMatchObject({ fname: 'Bina', lname: 'Twelve', legacyFullName: 'Bina Twelve' })
+    expect(contact).toMatchObject({ fname: 'Bina', lname: 'Twelve', legacyFullName: 'Bina' })
 
     const cleared = await app.inject({
       method: 'PATCH',

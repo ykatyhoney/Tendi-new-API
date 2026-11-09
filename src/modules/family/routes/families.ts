@@ -3,6 +3,7 @@ import { ApiError } from '../../../lib/api-error.js'
 import {
   createFamilyBody,
   createMemberBody,
+  deleteMemberBody,
   familyDetail,
   familyPage,
   familyParams,
@@ -106,10 +107,14 @@ const familyRoutes: FastifyPluginAsyncTypebox = async (app) => {
       schema: {
         operationId: 'deleteFamilyMember',
         params: memberParams,
+        body: deleteMemberBody,
         response: { 200: familyWriteResult },
       },
     },
-    async (request) => deleteMember(app.db, staffId(request), request.params.id, request.params.memberId),
+    async (request) =>
+      deleteMember(app.db, staffId(request), request.params.id, request.params.memberId, {
+        allowEmptyParents: request.body?.allowEmptyParents === true,
+      }),
   )
 }
 
