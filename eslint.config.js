@@ -7,4 +7,12 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   tseslint.configs.recommended,
+  {
+    // pm2 reads its config as CommonJS (the package is "type": "module", so the file is .cjs).
+    files: ['deploy/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { module: 'writable', require: 'readonly', __dirname: 'readonly', process: 'readonly' },
+    },
+  },
 )
