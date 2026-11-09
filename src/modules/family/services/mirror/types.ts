@@ -1,7 +1,7 @@
+import type { AddressType, NotifyMethod, PhoneType } from '../../schemas/common.js'
+
+export type { AddressType, NotifyMethod, PhoneType }
 export type ParentSlot = 'father' | 'mother'
-export type PhoneType = 'mobile' | 'home' | 'work' | 'other'
-export type AddressType = 'home' | 'work' | 'billing' | 'other'
-export type NotifyMethod = 'sms' | 'voice' | 'both'
 
 export interface MirrorPhone {
   id: number

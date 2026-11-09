@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2/promise'
 import { placeholders, rows, type Sql } from '../../repositories/query.js'
+import { groupBy } from '../values.js'
 import type { LegacyValues, MirrorFamily, MirrorMember, NotifyMethod, ParentSlot } from './types.js'
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from './types.js'
 
@@ -71,6 +72,14 @@ interface RightsRow extends RowDataPacket {
   isPaymentResponsible: number
 }
 
+/** Every member of a family, trashed ones included. derive.ts picks the active ones. */
+const MEMBER_SELECT = `SELECT m.family_id AS familyId, m.id, m.family_contact_id AS contactId, m.status,
+         rt.parent_slot AS slot, rt.slot_rank AS slotRank, m.sort_order AS sortOrder, m.is_primary AS isPrimary,
+         c.fname, c.lname, c.legacy_full_name AS legacyFullName, c.occupation, c.employer
+  FROM family_members AS m
+  INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
+  INNER JOIN relationship_types AS rt ON rt.code = m.relationship`
+
 export async function loadChildren(db: Sql, childIds: readonly number[] | 'linked'): Promise<LoadedChild[]> {
   const filter = childIds === 'linked' ? 'c.family_id IS NOT NULL' : `c.id IN (${placeholders(childIds.length)})`
   const params = childIds === 'linked' ? [] : childIds
@@ -96,13 +105,7 @@ export async function loadChildren(db: Sql, childIds: readonly number[] | 'linke
   const [memberRows, rightsRows] = await Promise.all([
     rows<MemberRow>(
       db,
-      `SELECT m.family_id AS familyId, m.id, m.family_contact_id AS contactId, m.status,
-              rt.parent_slot AS slot, rt.slot_rank AS slotRank, m.sort_order AS sortOrder, m.is_primary AS isPrimary,
-              c.fname, c.lname, c.legacy_full_name AS legacyFullName, c.occupation, c.employer
-       FROM family_members AS m
-       INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
-       INNER JOIN relationship_types AS rt ON rt.code = m.relationship
-       WHERE m.family_id IN (${placeholders(familyIds.length)})`,
+      `${MEMBER_SELECT} WHERE m.family_id IN (${placeholders(familyIds.length)})`,
       familyIds,
     ),
     rows<RightsRow>(
@@ -137,11 +140,11 @@ export async function loadChildren(db: Sql, childIds: readonly number[] | 'linke
        FROM family_contact_addresses`,
     ),
   ])
-  const phones = group(phoneRows, (row) => Number(row.contactId))
-  const emails = group(emailRows, (row) => Number(row.contactId))
-  const addresses = group(addressRows, (row) => Number(row.contactId))
-  const membersByFamily = group(memberRows, (row) => Number(row.familyId))
-  const rightsByChild = group(rightsRows, (row) => Number(row.childId))
+  const phones = groupBy(phoneRows, (row) => Number(row.contactId))
+  const emails = groupBy(emailRows, (row) => Number(row.contactId))
+  const addresses = groupBy(addressRows, (row) => Number(row.contactId))
+  const membersByFamily = groupBy(memberRows, (row) => Number(row.familyId))
+  const rightsByChild = groupBy(rightsRows, (row) => Number(row.childId))
 
   return childRows.map((row) => {
     const childId = Number(row.id)
@@ -179,13 +182,7 @@ export async function loadTargetFamily(db: Sql, familyId: number, childId: numbe
   }
   const memberRows = await rows<MemberRow>(
     db,
-    `SELECT m.family_id AS familyId, m.id, m.family_contact_id AS contactId, m.status,
-            rt.parent_slot AS slot, rt.slot_rank AS slotRank, m.sort_order AS sortOrder, m.is_primary AS isPrimary,
-            c.fname, c.lname, c.legacy_full_name AS legacyFullName, c.occupation, c.employer
-     FROM family_members AS m
-     INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
-     INNER JOIN relationship_types AS rt ON rt.code = m.relationship
-     WHERE m.family_id = ?`,
+    `${MEMBER_SELECT} WHERE m.family_id = ?`,
     [familyId],
   )
   return assembleFamily(db, familyId, stringValue(family['householdPhone']), childId, memberRows)
@@ -254,9 +251,9 @@ async function assembleFamily(
       [childId],
     ),
   ])
-  const phones = group(phoneRows, (row) => Number(row.contactId))
-  const emails = group(emailRows, (row) => Number(row.contactId))
-  const addresses = group(addressRows, (row) => Number(row.contactId))
+  const phones = groupBy(phoneRows, (row) => Number(row.contactId))
+  const emails = groupBy(emailRows, (row) => Number(row.contactId))
+  const addresses = groupBy(addressRows, (row) => Number(row.contactId))
   const rights = new Map(rightsRows.map((rightsRow) => [Number(rightsRow.memberId), rightsRow]))
   return {
     id: familyId,
@@ -363,18 +360,4 @@ function stringValue(value: unknown): string {
 
 function flagValue(value: unknown): boolean {
   return value === true || value === 1 || value === '1'
-}
-
-function group<T>(items: readonly T[], key: (item: T) => number): Map<number, T[]> {
-  const grouped = new Map<number, T[]>()
-  for (const item of items) {
-    const id = key(item)
-    const list = grouped.get(id)
-    if (list === undefined) {
-      grouped.set(id, [item])
-    } else {
-      list.push(item)
-    }
-  }
-  return grouped
 }

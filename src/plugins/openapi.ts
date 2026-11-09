@@ -2,9 +2,21 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import { apiErrorSchema } from '../lib/api-error.js'
+
+const ERROR_REF = { $ref: 'ApiError#' }
 
 const openapiPlugin: FastifyPluginAsync = async (app) => {
+  // Shared before any route is added, so every route's 4xx and 5xx response can reference it.
+  app.addSchema(apiErrorSchema)
+
   await app.register(swagger, {
+    // Name shared schemas by their $id, so the document has components/schemas/ApiError, not def-0.
+    refResolver: {
+      buildLocalReference(json, _baseUri, _fragment, index) {
+        return typeof json['$id'] === 'string' ? json['$id'] : `def-${index}`
+      },
+    },
     openapi: {
       openapi: '3.0.3',
       info: {
@@ -39,8 +51,13 @@ const openapiPlugin: FastifyPluginAsync = async (app) => {
     if (schema.operationId === undefined && typeof route.method === 'string') {
       schema.operationId = operationId(route.method, route.url)
     }
+    // Every error goes through the one error handler, so every route documents the same error body.
+    const response = (schema.response ?? {}) as Record<string, unknown>
+    response['4xx'] ??= ERROR_REF
+    response['5xx'] ??= ERROR_REF
+    schema.response = response
     if (schema.security === undefined) {
-      schema.security = route.url === '/api/v1/health' ? [] : [{ bearerAuth: [] }]
+      schema.security = route.url.startsWith('/api/v1/health') ? [] : [{ bearerAuth: [] }]
     }
     route.schema = schema
   })

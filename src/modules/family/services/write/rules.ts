@@ -18,13 +18,26 @@ export function typeLabelFor(type: string, label: string | null | undefined): st
   return trimmed
 }
 
+/** A non-empty list needs exactly one primary. None is a 400; two or more is the same 409 the database gives. */
 export function assertOnePrimary(itemCount: number, primaryCount: number): void {
-  if (itemCount === 0) {
+  if (itemCount === 0 || primaryCount === 1) {
     return
   }
-  if (primaryCount !== 1) {
-    throw new ApiError(409, 'SECOND_PRIMARY', 'This list needs exactly one primary.')
+  if (primaryCount === 0) {
+    throw new ApiError(400, 'PRIMARY_REQUIRED', 'Mark one item in this list as primary.')
   }
+  throw new ApiError(409, 'SECOND_PRIMARY', 'This list needs exactly one primary.')
+}
+
+/** Trimmed names. A contact needs a first or a last name. */
+export function contactNames(fname: string, lname: string): { fname: string; lname: string } {
+  const names = { fname: fname.trim(), lname: lname.trim() }
+  if (names.fname.length === 0 && names.lname.length === 0) {
+    throw new ApiError(400, 'VALIDATION', 'A contact needs a first or last name.', [
+      { path: '/fname', message: 'must not be blank when lname is blank' },
+    ])
+  }
+  return names
 }
 
 export function requireChange(present: boolean): void {

@@ -182,6 +182,22 @@ export function toAppConfig(env: RawEnv): AppConfig {
   }
 }
 
+/**
+ * Settings that start but probably do not do what was meant. buildApp logs each one as a warning.
+ * Staff auth runs before the relationship-admin check, so a relationship-admin type that is not
+ * also a staff type is refused with 403 before it reaches the routes it was listed for (open item D5).
+ */
+export function configWarnings(config: Pick<AppConfig, 'allowedStaffTypes' | 'relationshipAdminTypes'>): string[] {
+  const unreachable = config.relationshipAdminTypes.filter((type) => !config.allowedStaffTypes.includes(type))
+  if (unreachable.length === 0) {
+    return []
+  }
+  return [
+    `RELATIONSHIP_ADMIN_TYPES lists ${unreachable.join(', ')}, which ALLOWED_STAFF_TYPES does not. ` +
+      'Those staff types are refused before they can manage relationship types.',
+  ]
+}
+
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<AppConfig> {
   const app = Fastify({ logger: false })
   try {

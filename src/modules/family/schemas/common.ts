@@ -1,0 +1,107 @@
+import { Type } from '@fastify/type-provider-typebox'
+
+/*
+ * Shapes used by more than one resource. Each enum matches the column's ENUM in tendi_family_module.sql.
+ * Contacts, families, the mirror, and the repositories all take their types from here.
+ */
+
+export const phoneType = Type.Union([
+  Type.Literal('mobile'),
+  Type.Literal('home'),
+  Type.Literal('work'),
+  Type.Literal('other'),
+])
+
+export const phoneChannel = Type.Union([
+  Type.Literal('none'),
+  Type.Literal('sms'),
+  Type.Literal('voice'),
+  Type.Literal('both'),
+])
+
+export const emailType = Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')])
+
+export const addressType = Type.Union([
+  Type.Literal('home'),
+  Type.Literal('work'),
+  Type.Literal('billing'),
+  Type.Literal('other'),
+])
+
+export const notifyMethod = Type.Union([Type.Literal('sms'), Type.Literal('voice'), Type.Literal('both')])
+
+export const recordStatus = Type.Union([Type.Literal('active'), Type.Literal('trash')])
+
+/** sort_order columns are int(11). A value outside this range is a 400, not a database error. */
+export const sortOrder = Type.Integer({ minimum: -2147483648, maximum: 2147483647 })
+
+export const phone = Type.Object(
+  {
+    id: Type.Integer(),
+    phone: Type.String(),
+    type: phoneType,
+    typeLabel: Type.Union([Type.String(), Type.Null()]),
+    channel: phoneChannel,
+    isPrimary: Type.Boolean(),
+    sortOrder: Type.Integer(),
+  },
+  { additionalProperties: false },
+)
+
+export const email = Type.Object(
+  {
+    id: Type.Integer(),
+    email: Type.String(),
+    type: emailType,
+    typeLabel: Type.Union([Type.String(), Type.Null()]),
+    isPrimary: Type.Boolean(),
+    sortOrder: Type.Integer(),
+  },
+  { additionalProperties: false },
+)
+
+export const address = Type.Object(
+  {
+    id: Type.Integer(),
+    type: addressType,
+    typeLabel: Type.Union([Type.String(), Type.Null()]),
+    line1: Type.String(),
+    line2: Type.String(),
+    city: Type.String(),
+    state: Type.String(),
+    zip: Type.String(),
+    isPrimary: Type.Boolean(),
+  },
+  { additionalProperties: false },
+)
+
+/** A new contact's fields. The service trims names and requires a first or last name. */
+export const newContact = Type.Object(
+  {
+    fname: Type.String({ maxLength: 100 }),
+    lname: Type.String({ maxLength: 100 }),
+    hebrewName: Type.Optional(Type.String({ maxLength: 255 })),
+    occupation: Type.Optional(Type.String({ maxLength: 150 })),
+    employer: Type.Optional(Type.String({ maxLength: 150 })),
+    note: Type.Optional(Type.Union([Type.String({ maxLength: 20000 }), Type.Null()])),
+  },
+  { additionalProperties: false },
+)
+
+export const searchQuery = Type.Object({
+  q: Type.Optional(Type.String({ maxLength: 100 })),
+  page: Type.Integer({ minimum: 1, default: 1 }),
+  pageSize: Type.Integer({ minimum: 1, maximum: 100, default: 25 }),
+})
+
+export type PhoneType = Type.Static<typeof phoneType>
+export type PhoneChannel = Type.Static<typeof phoneChannel>
+export type EmailType = Type.Static<typeof emailType>
+export type AddressType = Type.Static<typeof addressType>
+export type NotifyMethod = Type.Static<typeof notifyMethod>
+export type RecordStatus = Type.Static<typeof recordStatus>
+export type PhoneOutput = Type.Static<typeof phone>
+export type EmailOutput = Type.Static<typeof email>
+export type AddressOutput = Type.Static<typeof address>
+export type NewContact = Type.Static<typeof newContact>
+export type SearchQuery = Type.Static<typeof searchQuery>

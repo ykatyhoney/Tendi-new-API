@@ -1,5 +1,6 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise'
-import { placeholders, rows } from './query.js'
+import type { RowDataPacket } from 'mysql2/promise'
+import type { NotifyMethod } from '../schemas/common.js'
+import { placeholders, rows, type Sql } from './query.js'
 
 export interface ChildRow extends RowDataPacket {
   id: number
@@ -15,7 +16,7 @@ export interface RightsRow extends RowDataPacket {
   memberId: number
   childId: number
   receivesNotifications: number
-  notifyMethod: 'sms' | 'voice' | 'both'
+  notifyMethod: NotifyMethod
   mayCollect: number
   collectFrom: string | null
   collectTo: string | null
@@ -23,7 +24,7 @@ export interface RightsRow extends RowDataPacket {
   isPaymentResponsible: number
 }
 
-export async function listChildren(db: Pool, familyIds: readonly number[]): Promise<ChildRow[]> {
+export async function listChildren(db: Sql, familyIds: readonly number[]): Promise<ChildRow[]> {
   if (familyIds.length === 0) {
     return []
   }
@@ -37,7 +38,7 @@ export async function listChildren(db: Pool, familyIds: readonly number[]): Prom
   )
 }
 
-export async function findChild(db: Pool, childId: number): Promise<ChildRow | null> {
+export async function findChild(db: Sql, childId: number): Promise<ChildRow | null> {
   const found = await rows<ChildRow>(
     db,
     `SELECT id, family_id AS familyId, fname, lname, \`class\` AS classId, status
@@ -49,7 +50,7 @@ export async function findChild(db: Pool, childId: number): Promise<ChildRow | n
 }
 
 /** Active family with the most rights rows for this child, then the lowest id. */
-export async function draftFamilyId(db: Pool, childId: number): Promise<number | null> {
+export async function draftFamilyId(db: Sql, childId: number): Promise<number | null> {
   const found = await rows<RowDataPacket>(
     db,
     `SELECT f.id AS familyId
@@ -66,7 +67,7 @@ export async function draftFamilyId(db: Pool, childId: number): Promise<number |
   return id === undefined ? null : Number(id)
 }
 
-export async function listRights(db: Pool, memberIds: readonly number[]): Promise<RightsRow[]> {
+export async function listRights(db: Sql, memberIds: readonly number[]): Promise<RightsRow[]> {
   if (memberIds.length === 0) {
     return []
   }

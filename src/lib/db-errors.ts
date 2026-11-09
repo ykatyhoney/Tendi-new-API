@@ -44,7 +44,38 @@ export function mapDatabaseError(error: unknown): ApiErrorBody | null {
       ...(constraint === undefined ? {} : { constraint }),
     })
   }
+  const invalid = INVALID_VALUE_ERRORS.get(errno)
+  if (invalid !== undefined) {
+    // The message names the column only. MariaDB's text can quote the rejected value, so it is not passed on.
+    const column = columnName(error)
+    return errorBody(400, 'VALIDATION', invalid, [
+      { path: column === undefined ? '/' : `/${column}`, message: invalid },
+    ])
+  }
   return null
+}
+
+/**
+ * A value the schema let through but the column refused. These are 400s, not server errors.
+ * The request schemas should catch them first; this is the backstop.
+ */
+const INVALID_VALUE_ERRORS = new Map<number, string>([
+  [1048, 'A required value is missing.'],
+  [1264, 'A number is out of range.'],
+  [1265, 'A value does not fit its column.'],
+  [1366, 'A value has characters or a format the column cannot store.'],
+  [1406, 'A value is too long.'],
+])
+
+/** `column 'name'` (1048, 1264, 1265, 1406) or `column \`db\`.\`table\`.\`name\`` (1366). */
+function columnName(error: DatabaseErrorLike): string | undefined {
+  const message = typeof error.sqlMessage === 'string' ? error.sqlMessage : ''
+  const quoted = message.match(/column '([A-Za-z0-9_]+)'/i)
+  if (quoted?.[1] !== undefined) {
+    return quoted[1]
+  }
+  const qualified = message.match(/column ((?:`[A-Za-z0-9_]+`\.?)+)/)
+  return qualified?.[1]?.split('.').pop()?.replaceAll('`', '')
 }
 
 function isDatabaseError(error: unknown): error is DatabaseErrorLike {
