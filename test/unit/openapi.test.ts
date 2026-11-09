@@ -56,6 +56,19 @@ describe('OpenAPI contract', () => {
     }
   })
 
+  it('names the request and response models under components.schemas and references them', () => {
+    const document = clean(app.swagger()) as {
+      components: { schemas: Record<string, unknown> }
+      paths: Record<string, Record<string, { requestBody?: unknown; responses: Record<string, unknown> }>>
+    }
+    for (const name of ['Family', 'FamilyMember', 'MemberContact', 'Contact', 'Phone', 'LinkPreview', 'RelationshipType']) {
+      expect(document.components.schemas[name], name).toBeDefined()
+    }
+    const ref = (body: unknown) => (body as { content: { 'application/json': { schema: { $ref?: string } } } }).content['application/json'].schema.$ref
+    expect(ref(document.paths['/api/v1/families/{id}']?.['get']?.responses['200'])).toBe('#/components/schemas/Family')
+    expect(ref(document.paths['/api/v1/contacts/{id}/phones']?.['put']?.requestBody)).toBe('#/components/schemas/ReplacePhonesBody')
+  })
+
   it('serializes an error with its details through the error schema', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/v1/_probe/conflict' })
     expect(response.statusCode).toBe(409)

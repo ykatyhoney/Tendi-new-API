@@ -1,14 +1,18 @@
 import type { RowDataPacket } from 'mysql2/promise'
 import mysql from 'mysql2/promise'
 import { afterAll, describe, expect, it } from 'vitest'
-import { newContact } from '../../src/modules/family/schemas/common.js'
+import { newContact as newContactRef } from '../../src/modules/family/schemas/common.js'
+import { definitionOf } from '../../src/modules/family/schemas/models.js'
 import {
-  patchContactBody,
+  patchContactBody as patchContactBodyRef,
   replaceAddressesBody,
   replaceEmailsBody,
   replacePhonesBody,
 } from '../../src/modules/family/schemas/contact.js'
-import { createFamilyBody, patchFamilyBody } from '../../src/modules/family/schemas/family.js'
+import {
+  createFamilyBody as createFamilyBodyRef,
+  patchFamilyBody as patchFamilyBodyRef,
+} from '../../src/modules/family/schemas/family.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
 
 /*
@@ -41,9 +45,14 @@ const ADDRESS = (part: string): Column[] => [
 /** TypeBox 1.x does not type schema options, so maxLength is read from the JSON schema object. */
 const max = (schema: unknown): number | undefined => (schema as { maxLength?: number }).maxLength
 
-const phoneItem = replacePhonesBody.properties.phones.items.properties
-const emailItem = replaceEmailsBody.properties.emails.items.properties
-const addressItem = replaceAddressesBody.properties.addresses.items.properties
+// The request schemas are named models ($refs); their definitions hold the limits.
+const newContact = definitionOf(newContactRef)
+const patchContactBody = definitionOf(patchContactBodyRef)
+const createFamilyBody = definitionOf(createFamilyBodyRef)
+const patchFamilyBody = definitionOf(patchFamilyBodyRef)
+const phoneItem = definitionOf(definitionOf(replacePhonesBody).properties.phones.items).properties
+const emailItem = definitionOf(definitionOf(replaceEmailsBody).properties.emails.items).properties
+const addressItem = definitionOf(definitionOf(replaceAddressesBody).properties.addresses.items).properties
 
 /** [request field, its schema maxLength, the columns it is written to]. */
 const FIELDS: [string, number | undefined, Column[]][] = [

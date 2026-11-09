@@ -1,42 +1,49 @@
 import { Type } from '@fastify/type-provider-typebox'
 import { OLD_COLUMN_LIMITS } from './limits.js'
+import { model } from './models.js'
 
 /*
  * Shapes used by more than one resource. Each enum matches the column's ENUM in tendi_family_module.sql.
  * Contacts, families, the mirror, and the repositories all take their types from here.
  */
 
-export const phoneType = Type.Union([
+const phoneTypeDefinition = Type.Union([
   Type.Literal('mobile'),
   Type.Literal('home'),
   Type.Literal('work'),
   Type.Literal('other'),
 ])
+export const phoneType = model('PhoneType', phoneTypeDefinition)
 
-export const phoneChannel = Type.Union([
+const phoneChannelDefinition = Type.Union([
   Type.Literal('none'),
   Type.Literal('sms'),
   Type.Literal('voice'),
   Type.Literal('both'),
 ])
+export const phoneChannel = model('PhoneChannel', phoneChannelDefinition)
 
-export const emailType = Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')])
+const emailTypeDefinition = Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')])
+export const emailType = model('EmailType', emailTypeDefinition)
 
-export const addressType = Type.Union([
+const addressTypeDefinition = Type.Union([
   Type.Literal('home'),
   Type.Literal('work'),
   Type.Literal('billing'),
   Type.Literal('other'),
 ])
+export const addressType = model('AddressType', addressTypeDefinition)
 
-export const notifyMethod = Type.Union([Type.Literal('sms'), Type.Literal('voice'), Type.Literal('both')])
+const notifyMethodDefinition = Type.Union([Type.Literal('sms'), Type.Literal('voice'), Type.Literal('both')])
+export const notifyMethod = model('NotifyMethod', notifyMethodDefinition)
 
-export const recordStatus = Type.Union([Type.Literal('active'), Type.Literal('trash')])
+const recordStatusDefinition = Type.Union([Type.Literal('active'), Type.Literal('trash')])
+export const recordStatus = model('RecordStatus', recordStatusDefinition)
 
 /** sort_order columns are int(11). A value outside this range is a 400, not a database error. */
 export const sortOrder = Type.Integer({ minimum: -2147483648, maximum: 2147483647 })
 
-export const phone = Type.Object(
+const phoneDefinition = Type.Object(
   {
     id: Type.Integer(),
     phone: Type.String(),
@@ -48,8 +55,9 @@ export const phone = Type.Object(
   },
   { additionalProperties: false },
 )
+export const phone = model('Phone', phoneDefinition)
 
-export const email = Type.Object(
+const emailDefinition = Type.Object(
   {
     id: Type.Integer(),
     email: Type.String(),
@@ -60,8 +68,9 @@ export const email = Type.Object(
   },
   { additionalProperties: false },
 )
+export const email = model('Email', emailDefinition)
 
-export const address = Type.Object(
+const addressDefinition = Type.Object(
   {
     id: Type.Integer(),
     type: addressType,
@@ -75,9 +84,10 @@ export const address = Type.Object(
   },
   { additionalProperties: false },
 )
+export const address = model('Address', addressDefinition)
 
 /** A new contact's fields. The service trims names and requires a first or last name. */
-export const newContact = Type.Object(
+const newContactDefinition = Type.Object(
   {
     fname: Type.String({ maxLength: OLD_COLUMN_LIMITS.name }),
     lname: Type.String({ maxLength: OLD_COLUMN_LIMITS.name }),
@@ -88,6 +98,7 @@ export const newContact = Type.Object(
   },
   { additionalProperties: false },
 )
+export const newContact = model('NewContact', newContactDefinition)
 
 /**
  * Optional body of a member removal or a link. allowEmptyParents saves even when the linked children would be

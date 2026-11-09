@@ -12,10 +12,11 @@ import {
   sortOrder,
 } from './common.js'
 import { OLD_COLUMN_LIMITS } from './limits.js'
+import { model } from './models.js'
 
 export const familySearchQuery = searchQuery
 
-const searchMember = Type.Object(
+const searchMemberDefinition = Type.Object(
   {
     name: Type.String(),
     relationship: Type.String(),
@@ -23,8 +24,9 @@ const searchMember = Type.Object(
   },
   { additionalProperties: false },
 )
+const searchMember = model('FamilySummaryMember', searchMemberDefinition)
 
-const searchChild = Type.Object(
+const searchChildDefinition = Type.Object(
   {
     id: Type.Integer(),
     fname: Type.String(),
@@ -33,8 +35,9 @@ const searchChild = Type.Object(
   },
   { additionalProperties: false },
 )
+const searchChild = model('ChildSummary', searchChildDefinition)
 
-const familySummary = Type.Object(
+const familySummaryDefinition = Type.Object(
   {
     id: Type.Integer(),
     name: Type.String(),
@@ -46,8 +49,9 @@ const familySummary = Type.Object(
   },
   { additionalProperties: false },
 )
+const familySummary = model('FamilySummary', familySummaryDefinition)
 
-export const familyPage = Type.Object(
+const familyPageDefinition = Type.Object(
   {
     items: Type.Array(familySummary),
     page: Type.Integer(),
@@ -56,8 +60,9 @@ export const familyPage = Type.Object(
   },
   { additionalProperties: false },
 )
+export const familyPage = model('FamilyPage', familyPageDefinition)
 
-const contactCard = Type.Object(
+const contactCardDefinition = Type.Object(
   {
     id: Type.Integer(),
     fname: Type.String(),
@@ -73,8 +78,9 @@ const contactCard = Type.Object(
   },
   { additionalProperties: false },
 )
+const contactCard = model('MemberContact', contactCardDefinition)
 
-const rights = Type.Object(
+const rightsDefinition = Type.Object(
   {
     id: Type.Integer(),
     childId: Type.Integer(),
@@ -88,8 +94,9 @@ const rights = Type.Object(
   },
   { additionalProperties: false },
 )
+const rights = model('MemberRights', rightsDefinition)
 
-const member = Type.Object(
+const memberDefinition = Type.Object(
   {
     id: Type.Integer(),
     relationship: Type.String(),
@@ -101,8 +108,9 @@ const member = Type.Object(
   },
   { additionalProperties: false },
 )
+const member = model('FamilyMember', memberDefinition)
 
-export const familyDetail = Type.Object(
+const familyDetailDefinition = Type.Object(
   {
     id: Type.Integer(),
     name: Type.String(),
@@ -113,6 +121,7 @@ export const familyDetail = Type.Object(
   },
   { additionalProperties: false },
 )
+export const familyDetail = model('Family', familyDetailDefinition)
 
 export const familyParams = Type.Object({
   id: Type.Integer({ minimum: 1 }),
@@ -123,23 +132,25 @@ export const memberParams = Type.Object({
   memberId: Type.Integer({ minimum: 1 }),
 })
 
-export const familyWriteResult = Type.Object(
+const familyWriteResultDefinition = Type.Object(
   {
     family: familyDetail,
     affected_child_ids: Type.Array(Type.Integer()),
   },
   { additionalProperties: false },
 )
+export const familyWriteResult = model('FamilyWriteResult', familyWriteResultDefinition)
 
-export const createFamilyBody = Type.Object(
+const createFamilyBodyDefinition = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 100 }),
     householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
   },
   { additionalProperties: false },
 )
+export const createFamilyBody = model('CreateFamilyBody', createFamilyBodyDefinition)
 
-export const patchFamilyBody = Type.Object(
+const patchFamilyBodyDefinition = Type.Object(
   {
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
     householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
@@ -147,8 +158,9 @@ export const patchFamilyBody = Type.Object(
   },
   { additionalProperties: false },
 )
+export const patchFamilyBody = model('PatchFamilyBody', patchFamilyBodyDefinition)
 
-export const createMemberBody = Type.Union([
+const createMemberBodyDefinition = Type.Union([
   Type.Object(
     {
       relationship: Type.String({ minLength: 1, maxLength: 32 }),
@@ -168,8 +180,9 @@ export const createMemberBody = Type.Union([
     { additionalProperties: false },
   ),
 ])
+export const createMemberBody = model('CreateMemberBody', createMemberBodyDefinition)
 
-export const patchMemberBody = Type.Object(
+const patchMemberBodyDefinition = Type.Object(
   {
     relationship: Type.Optional(Type.String({ minLength: 1, maxLength: 32 })),
     isPrimary: Type.Optional(Type.Boolean()),
@@ -178,6 +191,7 @@ export const patchMemberBody = Type.Object(
   },
   { additionalProperties: false },
 )
+export const patchMemberBody = model('PatchMemberBody', patchMemberBodyDefinition)
 
 /** DELETE /families/:id/members/:memberId: an optional { allowEmptyParents }. */
 export const deleteMemberBody = emptyParentsBody
@@ -188,13 +202,14 @@ export type CreateMemberBody = Type.Static<typeof createMemberBody>
 export type PatchMemberBody = Type.Static<typeof patchMemberBody>
 export type FamilyWriteResult = Type.Static<typeof familyWriteResult>
 
-export const childFamily = Type.Object(
+const childFamilyDefinition = Type.Object(
   {
     link: Type.Union([Type.Literal('linked'), Type.Literal('draft')]),
     family: familyDetail,
   },
   { additionalProperties: false },
 )
+export const childFamily = model('ChildFamily', childFamilyDefinition)
 
 export const childParams = Type.Object({
   childId: Type.Integer({ minimum: 1 }),

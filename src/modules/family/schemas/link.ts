@@ -1,4 +1,5 @@
 import { Type } from '@fastify/type-provider-typebox'
+import { model } from './models.js'
 import { emptyParentsBody, notifyMethod } from './common.js'
 
 /** POST .../link: an optional { allowEmptyParents }. */
@@ -11,7 +12,7 @@ export const familyChildParams = Type.Object({
 
 const legacyCell = Type.Union([Type.String(), Type.Integer(), Type.Null()])
 
-const previewColumn = Type.Object(
+const previewColumnDefinition = Type.Object(
   {
     column: Type.String(),
     table: Type.Union([Type.Literal('children'), Type.Literal('children_additional_information')]),
@@ -22,8 +23,9 @@ const previewColumn = Type.Object(
   },
   { additionalProperties: false },
 )
+const previewColumn = model('LinkPreviewColumn', previewColumnDefinition)
 
-export const linkPreview = Type.Object(
+const linkPreviewDefinition = Type.Object(
   {
     childId: Type.Integer(),
     familyId: Type.Integer(),
@@ -32,8 +34,9 @@ export const linkPreview = Type.Object(
   },
   { additionalProperties: false },
 )
+export const linkPreview = model('LinkPreview', linkPreviewDefinition)
 
-export const linkResult = Type.Object(
+const linkResultDefinition = Type.Object(
   {
     childId: Type.Integer(),
     familyId: Type.Integer(),
@@ -41,8 +44,9 @@ export const linkResult = Type.Object(
   },
   { additionalProperties: false },
 )
+export const linkResult = model('LinkResult', linkResultDefinition)
 
-export const unlinkResult = Type.Object(
+const unlinkResultDefinition = Type.Object(
   {
     childId: Type.Integer(),
     familyId: Type.Null(),
@@ -50,8 +54,9 @@ export const unlinkResult = Type.Object(
   },
   { additionalProperties: false },
 )
+export const unlinkResult = model('UnlinkResult', unlinkResultDefinition)
 
-const rightsInput = Type.Object(
+const rightsInputDefinition = Type.Object(
   {
     memberId: Type.Integer({ minimum: 1 }),
     receivesNotifications: Type.Boolean(),
@@ -64,13 +69,15 @@ const rightsInput = Type.Object(
   },
   { additionalProperties: false },
 )
+const rightsInput = model('RightsInput', rightsInputDefinition)
 
-export const replaceRightsBody = Type.Object(
+const replaceRightsBodyDefinition = Type.Object(
   { rights: Type.Array(rightsInput) },
   { additionalProperties: false },
 )
+export const replaceRightsBody = model('ReplaceRightsBody', replaceRightsBodyDefinition)
 
-const rightsOutput = Type.Object(
+const rightsOutputDefinition = Type.Object(
   {
     id: Type.Integer(),
     memberId: Type.Integer(),
@@ -85,8 +92,9 @@ const rightsOutput = Type.Object(
   },
   { additionalProperties: false },
 )
+const rightsOutput = model('ChildRights', rightsOutputDefinition)
 
-export const rightsResult = Type.Object(
+const rightsResultDefinition = Type.Object(
   {
     familyId: Type.Integer(),
     childId: Type.Integer(),
@@ -95,6 +103,7 @@ export const rightsResult = Type.Object(
   },
   { additionalProperties: false },
 )
+export const rightsResult = model('RightsResult', rightsResultDefinition)
 
 export type LinkPreview = Type.Static<typeof linkPreview>
 export type LinkResult = Type.Static<typeof linkResult>

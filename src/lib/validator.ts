@@ -1,5 +1,5 @@
 import { type FastifySchemaCompiler } from 'fastify'
-import { Ajv, type ErrorObject } from 'ajv'
+import { Ajv, type AnySchema, type ErrorObject } from 'ajv'
 import addFormats from 'ajv-formats'
 
 const sharedOptions = {
@@ -11,6 +11,23 @@ const sharedOptions = {
 
 const bodyValidator = makeAjv(false)
 const queryValidator = makeAjv(true)
+const addedSchemas = new Set<string>()
+
+/**
+ * Shared schemas that route schemas reference with $ref (the named models). Fastify adds its shared schemas only to
+ * its own Ajv, not to a custom validator compiler, so they are added here. Safe to call once per app instance.
+ */
+export function addValidatorSchemas(schemas: readonly object[]): void {
+  for (const schema of schemas) {
+    const id = (schema as { $id?: unknown }).$id
+    if (typeof id !== 'string' || addedSchemas.has(id)) {
+      continue
+    }
+    bodyValidator.addSchema(schema as AnySchema)
+    queryValidator.addSchema(schema as AnySchema)
+    addedSchemas.add(id)
+  }
+}
 
 /**
  * Ajv for every route. Query, params, and headers are coerced. The body is not.

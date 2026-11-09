@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify'
 import type { Pool, RowDataPacket } from 'mysql2/promise'
-import { Type } from '@fastify/type-provider-typebox'
+import { healthResponse, liveResponse } from '../schemas/health.js'
 import { ApiError } from '../../../lib/api-error.js'
 
 /** The nine family-module tables. Legacy tables are not part of this list. */
@@ -16,18 +16,10 @@ export const FAMILY_MODULE_TABLES = [
   'family_mirror_lock_log',
 ] as const
 
-const healthResponse = Type.Object(
-  {
-    status: Type.Literal('ok'),
-    database: Type.Literal('ready'),
-  },
-  { additionalProperties: false },
-)
 
 /** A passed schema check is trusted for this long. The pool is still pinged on every call. */
 const SCHEMA_CHECK_TTL_MS = 5 * 60 * 1000
 
-const liveResponse = Type.Object({ status: Type.Literal('ok') }, { additionalProperties: false })
 
 /**
  * /health/live: the process is up. It never touches the database, so a restart policy does not

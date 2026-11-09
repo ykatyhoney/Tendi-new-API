@@ -12,8 +12,9 @@ import {
   sortOrder,
 } from './common.js'
 import { OLD_COLUMN_LIMITS } from './limits.js'
+import { model } from './models.js'
 
-const contactPhone = Type.Object(
+const contactPhoneDefinition = Type.Object(
   {
     phone: Type.String(),
     type: phoneType,
@@ -21,8 +22,9 @@ const contactPhone = Type.Object(
   },
   { additionalProperties: false },
 )
+const contactPhone = model('ContactSummaryPhone', contactPhoneDefinition)
 
-const household = Type.Object(
+const householdDefinition = Type.Object(
   {
     familyId: Type.Integer(),
     familyName: Type.String(),
@@ -35,8 +37,9 @@ const household = Type.Object(
   },
   { additionalProperties: false },
 )
+const household = model('ContactHousehold', householdDefinition)
 
-const contactSummary = Type.Object(
+const contactSummaryDefinition = Type.Object(
   {
     id: Type.Integer(),
     fname: Type.String(),
@@ -52,10 +55,11 @@ const contactSummary = Type.Object(
   },
   { additionalProperties: false },
 )
+const contactSummary = model('ContactSummary', contactSummaryDefinition)
 
 export const contactSearchQuery = searchQuery
 
-export const contactPage = Type.Object(
+const contactPageDefinition = Type.Object(
   {
     items: Type.Array(contactSummary),
     page: Type.Integer(),
@@ -64,8 +68,9 @@ export const contactPage = Type.Object(
   },
   { additionalProperties: false },
 )
+export const contactPage = model('ContactPage', contactPageDefinition)
 
-export const contactDetail = Type.Object(
+const contactDetailDefinition = Type.Object(
   {
     id: Type.Integer(),
     fname: Type.String(),
@@ -82,12 +87,13 @@ export const contactDetail = Type.Object(
   },
   { additionalProperties: false },
 )
+export const contactDetail = model('Contact', contactDetailDefinition)
 
 export const contactParams = Type.Object({
   id: Type.Integer({ minimum: 1 }),
 })
 
-export const patchContactBody = Type.Object(
+const patchContactBodyDefinition = Type.Object(
   {
     fname: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.name })),
     lname: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.name })),
@@ -98,8 +104,9 @@ export const patchContactBody = Type.Object(
   },
   { additionalProperties: false },
 )
+export const patchContactBody = model('PatchContactBody', patchContactBodyDefinition)
 
-const phoneInput = Type.Object(
+const phoneInputDefinition = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -112,8 +119,9 @@ const phoneInput = Type.Object(
   },
   { additionalProperties: false },
 )
+const phoneInput = model('PhoneInput', phoneInputDefinition)
 
-const emailInput = Type.Object(
+const emailInputDefinition = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -125,8 +133,9 @@ const emailInput = Type.Object(
   },
   { additionalProperties: false },
 )
+const emailInput = model('EmailInput', emailInputDefinition)
 
-const addressInput = Type.Object(
+const addressInputDefinition = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
@@ -141,27 +150,32 @@ const addressInput = Type.Object(
   },
   { additionalProperties: false },
 )
+const addressInput = model('AddressInput', addressInputDefinition)
 
-export const replacePhonesBody = Type.Object(
+const replacePhonesBodyDefinition = Type.Object(
   { phones: Type.Array(phoneInput) },
   { additionalProperties: false },
 )
-export const replaceEmailsBody = Type.Object(
+export const replacePhonesBody = model('ReplacePhonesBody', replacePhonesBodyDefinition)
+const replaceEmailsBodyDefinition = Type.Object(
   { emails: Type.Array(emailInput) },
   { additionalProperties: false },
 )
-export const replaceAddressesBody = Type.Object(
+export const replaceEmailsBody = model('ReplaceEmailsBody', replaceEmailsBodyDefinition)
+const replaceAddressesBodyDefinition = Type.Object(
   { addresses: Type.Array(addressInput) },
   { additionalProperties: false },
 )
+export const replaceAddressesBody = model('ReplaceAddressesBody', replaceAddressesBodyDefinition)
 
-export const contactWriteResult = Type.Object(
+const contactWriteResultDefinition = Type.Object(
   {
     contact: contactDetail,
     affected_child_ids: Type.Array(Type.Integer()),
   },
   { additionalProperties: false },
 )
+export const contactWriteResult = model('ContactWriteResult', contactWriteResultDefinition)
 
 export type ContactPage = Type.Static<typeof contactPage>
 export type ContactDetail = Type.Static<typeof contactDetail>

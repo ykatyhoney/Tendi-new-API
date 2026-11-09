@@ -3,12 +3,21 @@ import fp from 'fastify-plugin'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import { apiErrorSchema } from '../lib/api-error.js'
+import { addValidatorSchemas } from '../lib/validator.js'
+import { registeredModels } from '../modules/family/schemas/index.js'
 
 const ERROR_REF = { $ref: 'ApiError#' }
 
 const openapiPlugin: FastifyPluginAsync = async (app) => {
   // Shared before any route is added, so every route's 4xx and 5xx response can reference it.
   app.addSchema(apiErrorSchema)
+  // The named models (schemas/models.ts): components.schemas in the document, $ref targets for the serializer,
+  // and for the request validator, which is a custom compiler and does not see fastify's shared schemas.
+  const models = registeredModels()
+  for (const schema of models) {
+    app.addSchema(schema)
+  }
+  addValidatorSchemas(models)
 
   await app.register(swagger, {
     // Name shared schemas by their $id, so the document has components/schemas/ApiError, not def-0.

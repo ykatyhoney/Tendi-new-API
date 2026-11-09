@@ -1,10 +1,11 @@
 import { Type } from '@fastify/type-provider-typebox'
+import { model } from './models.js'
 import { sortOrder } from './common.js'
 
 /** Lowercase letters and _, starting with a letter. */
 const RELATIONSHIP_CODE_PATTERN = '^[a-z][a-z_]*$'
 
-const relationshipType = Type.Object(
+const relationshipTypeDefinition = Type.Object(
   {
     code: Type.String(),
     label: Type.String(),
@@ -15,15 +16,17 @@ const relationshipType = Type.Object(
   },
   { additionalProperties: false },
 )
+const relationshipType = model('RelationshipType', relationshipTypeDefinition)
 
-export const relationshipTypeList = Type.Object(
+const relationshipTypeListDefinition = Type.Object(
   {
     items: Type.Array(relationshipType),
   },
   { additionalProperties: false },
 )
+export const relationshipTypeList = model('RelationshipTypeList', relationshipTypeListDefinition)
 
-const storedRelationshipType = Type.Object(
+const storedRelationshipTypeDefinition = Type.Object(
   {
     code: Type.String(),
     label: Type.String(),
@@ -34,12 +37,13 @@ const storedRelationshipType = Type.Object(
   },
   { additionalProperties: false },
 )
+const storedRelationshipType = model('RelationshipTypeRecord', storedRelationshipTypeDefinition)
 
 export const relationshipTypeParams = Type.Object({
   code: Type.String({ minLength: 1, maxLength: 32, pattern: RELATIONSHIP_CODE_PATTERN }),
 })
 
-export const createRelationshipTypeBody = Type.Object(
+const createRelationshipTypeBodyDefinition = Type.Object(
   {
     code: Type.String({ minLength: 1, maxLength: 32, pattern: RELATIONSHIP_CODE_PATTERN }),
     label: Type.String({ minLength: 1, maxLength: 64 }),
@@ -47,8 +51,9 @@ export const createRelationshipTypeBody = Type.Object(
   },
   { additionalProperties: false },
 )
+export const createRelationshipTypeBody = model('CreateRelationshipTypeBody', createRelationshipTypeBodyDefinition)
 
-export const patchRelationshipTypeBody = Type.Object(
+const patchRelationshipTypeBodyDefinition = Type.Object(
   {
     label: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
     sortOrder: Type.Optional(sortOrder),
@@ -56,14 +61,16 @@ export const patchRelationshipTypeBody = Type.Object(
   },
   { additionalProperties: false },
 )
+export const patchRelationshipTypeBody = model('PatchRelationshipTypeBody', patchRelationshipTypeBodyDefinition)
 
-export const relationshipTypeResult = Type.Object(
+const relationshipTypeResultDefinition = Type.Object(
   {
     relationshipType: storedRelationshipType,
     affected_child_ids: Type.Array(Type.Integer()),
   },
   { additionalProperties: false },
 )
+export const relationshipTypeResult = model('RelationshipTypeResult', relationshipTypeResultDefinition)
 
 export type RelationshipTypeList = Type.Static<typeof relationshipTypeList>
 export type CreateRelationshipTypeBody = Type.Static<typeof createRelationshipTypeBody>
