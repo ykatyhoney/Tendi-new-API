@@ -8,7 +8,7 @@ Read [docs/CONTEXT.md](docs/CONTEXT.md) first. The build guide is [docs/family-m
 - The API never creates, alters, or drops a table. The schema belongs to `db/tendi_family_module.sql`; schema changes go to its owner.
 - No real SMS or email.
 - Exact dependency versions (no `^` or `~`). Node 26.
-- One branch per change, `family/<step>-<slug>`, never `main`.
+- Work directly on `main`. No feature branches. This replaces the build guide's one-branch-per-step rule (decided 9 November 2026).
 
 ## How a write works
 
