@@ -7,9 +7,9 @@ const targetFlag = process.argv.indexOf('--target')
 const target = targetFlag === -1 ? '' : process.argv[targetFlag + 1] ?? ''
 const database = databaseNameForTarget(target)
 const config = loadAdminConfig()
-const dumpPath = resolve('db/tendi-family-dev-db-2026-11-06.sql')
+const dumpPath = resolve('db/tendi-family-dev-db-2026-11-09.sql')
 
-console.log(`Recreating ${database} on ${config.host} from the November 6 dump.`)
+console.log(`Recreating ${database} on ${config.host} from the November 9 dump (revision 4).`)
 await recreateDatabase(config, database)
 await importDump(config, database, dumpPath)
 

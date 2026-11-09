@@ -28,7 +28,7 @@ jobs:
     name: Schema, reconcile, API and DB tests (MariaDB 10.11, Redis)
     runs-on: ubuntu-24.04
     # Ubuntu 24.04 ships MariaDB 10.11, installed with apt so the project's no-Docker rule holds here too.
-    # This job imports db/tendi-family-dev-db-2026-11-06.sql and db/tendi_family_module.sql from the repository.
+    # This job imports db/tendi-family-dev-db-2026-11-09.sql and db/raul-tendi-db-2026-09-24_family.sql from the repository.
     # If those dumps move out of git, fetch them here from wherever they are kept instead.
     env:
       NODE_ENV: test
