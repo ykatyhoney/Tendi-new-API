@@ -24,7 +24,12 @@ const healthResponse = Type.Object(
   { additionalProperties: false },
 )
 
+/** A passed schema check is trusted for this long. The pool is still pinged on every call. */
+const SCHEMA_CHECK_TTL_MS = 5 * 60 * 1000
+
 const healthRoutes: FastifyPluginAsync = async (app) => {
+  let schemaCheckedAt: number | undefined
+
   app.get(
     '/api/v1/health',
     {
@@ -35,16 +40,28 @@ const healthRoutes: FastifyPluginAsync = async (app) => {
         response: { 200: healthResponse },
       },
     },
-    async () => {
-      await assertFamilySchema(app.db)
+    async (request) => {
+      await app.db.query('SELECT 1 AS ok')
+      const now = Date.now()
+      if (schemaCheckedAt === undefined || now - schemaCheckedAt > SCHEMA_CHECK_TTL_MS) {
+        const problem = await familySchemaProblem(app.db)
+        if (problem !== null) {
+          schemaCheckedAt = undefined
+          // Health is open, so which tables are missing goes to the log, not to the caller.
+          request.log.error(problem, 'family schema is not ready')
+          throw new ApiError(503, 'SCHEMA', 'The family schema is not ready')
+        }
+        schemaCheckedAt = now
+      }
       return { status: 'ok' as const, database: 'ready' as const }
     },
   )
 }
 
-async function assertFamilySchema(db: Pool): Promise<void> {
-  await db.query('SELECT 1 AS ok')
-
+/** null when children.family_id and the nine family tables exist. */
+export async function familySchemaProblem(
+  db: Pool,
+): Promise<{ familyId: boolean; missing: string[] } | null> {
   const [familyIdRows] = (await db.query(
     `SELECT COLUMN_NAME AS name
      FROM information_schema.COLUMNS
@@ -65,11 +82,9 @@ async function assertFamilySchema(db: Pool): Promise<void> {
   const present = new Set(tableRows.map((row) => String(row['name'])))
   const missing = FAMILY_MODULE_TABLES.filter((name) => !present.has(name))
   if (familyIdRows.length !== 1 || missing.length > 0) {
-    throw new ApiError(503, 'SCHEMA', 'The family schema is not ready', {
-      familyId: familyIdRows.length === 1,
-      missing,
-    })
+    return { familyId: familyIdRows.length === 1, missing }
   }
+  return null
 }
 
 export default healthRoutes

@@ -5,8 +5,15 @@ import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { errorBody } from '../lib/api-error.js'
 import { readBearerToken } from '../lib/bearer.js'
+import { tokenHash } from '../lib/token-hash.js'
 
 const PER_MINUTE = 300
+
+/*
+ * Both limits keep their counters in this process's memory. With more than one API instance,
+ * each instance counts on its own; pass a shared store (for example Redis) to @fastify/rate-limit then.
+ * request.ip is the client only when TRUST_PROXY names the proxy in front of the API.
+ */
 
 const securityPlugin: FastifyPluginAsync = async (app) => {
   await app.register(helmet)
@@ -26,7 +33,11 @@ const securityPlugin: FastifyPluginAsync = async (app) => {
   const limitByToken = app.createRateLimit({
     max: PER_MINUTE,
     timeWindow: '1 minute',
-    keyGenerator: (request) => `token:${bearerToken(request) ?? 'none'}`,
+    // The hash, so raw tokens are never kept as keys in the limiter's store.
+    keyGenerator: (request) => {
+      const token = bearerToken(request)
+      return token === undefined ? 'token:none' : `token:${tokenHash(token)}`
+    },
     allowList: (request) => bearerToken(request) === undefined,
   })
 

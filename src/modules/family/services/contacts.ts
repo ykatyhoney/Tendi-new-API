@@ -6,15 +6,13 @@ import {
   listHouseholds,
   listPhones,
   pageContacts,
-  searchContactIds,
 } from '../repositories/contacts.js'
 import type { ContactDetail, ContactPage } from '../schemas/contact.js'
 import type { FamilySearchQuery } from '../schemas/family.js'
 import { asBoolean, asNumber, asNullableString, asString, groupBy } from './values.js'
 
 export async function searchContacts(db: Pool, query: FamilySearchQuery): Promise<ContactPage> {
-  const ids = await searchContactIds(db, query.q ?? '')
-  const page = await pageContacts(db, ids, query.page, query.pageSize)
+  const page = await pageContacts(db, query.q ?? '', query.page, query.pageSize)
   const contactIds = page.contacts.map((contact) => asNumber(contact.id))
   const [phones, households] = await Promise.all([
     listPhones(db, contactIds),

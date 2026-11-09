@@ -6,8 +6,10 @@ describe('reconcile arguments', () => {
   it('reads a child id and the fix flag', () => {
     expect(parseReconcileArgs([])).toEqual({ fix: false })
     expect(parseReconcileArgs(['--child', '765'])).toEqual({ fix: false, childId: 765 })
-    expect(parseReconcileArgs(['--child', '765', '--fix'])).toEqual({ fix: true, childId: 765 })
+    expect(parseReconcileArgs(['--child', '765', '--fix', '--admin', '3'])).toEqual({ fix: true, childId: 765, adminId: 3 })
     expect(() => parseReconcileArgs(['--fix'])).toThrow(/--child/)
+    expect(() => parseReconcileArgs(['--child', '765', '--fix'])).toThrow(/--admin/)
+    expect(() => parseReconcileArgs(['--admin', 'x'])).toThrow(/positive integer/)
     expect(() => parseReconcileArgs(['--child', '0'])).toThrow(/positive integer/)
     expect(() => parseReconcileArgs(['--write'])).toThrow(/Unknown argument/)
   })

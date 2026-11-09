@@ -4195,6 +4195,10 @@
                         "phone"
                       ],
                       "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
                         "phone": {
                           "type": "string",
                           "minLength": 1,
@@ -4663,6 +4667,10 @@
                         "email"
                       ],
                       "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
                         "email": {
                           "type": "string",
                           "minLength": 1,
@@ -5094,6 +5102,10 @@
                     "items": {
                       "type": "object",
                       "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
                         "type": {
                           "anyOf": [
                             {

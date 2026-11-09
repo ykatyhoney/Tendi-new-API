@@ -30,6 +30,9 @@ declare module 'fastify' {
   }
 }
 
+/** last_seen_at is refreshed when it is older than this. */
+const LAST_SEEN_INTERVAL_SECONDS = 60
+
 const authPlugin: FastifyPluginAsync = async (app) => {
   app.decorate('authenticate', async (request: FastifyRequest) => {
     const token = readBearerToken(request.headers.authorization)
@@ -64,13 +67,13 @@ const authPlugin: FastifyPluginAsync = async (app) => {
     request.staff = staff
     request.log = request.log.child({ staffId: staff.adminId })
 
-    const [updated] = await app.db.query<ResultSetHeader>(
-      'UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP() WHERE id = :tokenId',
+    // At most one write per token per minute, so reads do not each write the token row.
+    await app.db.query<ResultSetHeader>(
+      `UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP()
+       WHERE id = :tokenId
+         AND (last_seen_at IS NULL OR last_seen_at < UTC_TIMESTAMP() - INTERVAL ${LAST_SEEN_INTERVAL_SECONDS} SECOND)`,
       { tokenId: row.tokenId },
     )
-    if (updated.affectedRows !== 1) {
-      throw new ApiError(401, 'UNAUTHORIZED', 'Unknown token')
-    }
   })
 
   app.decorate('requireRelationshipAdmin', async (request: FastifyRequest) => {

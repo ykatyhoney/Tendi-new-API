@@ -12,25 +12,27 @@ export interface FamilyModuleOptions {
 }
 
 /**
- * Family routes. Health stays open. Every other route in this plugin requires a staff token.
+ * Family routes. Health is registered outside the staff-auth scope.
+ * Every other route requires a staff token, checked in onRequest so an unauthenticated
+ * request is refused before its body is parsed or validated.
  */
 const familyModule: FastifyPluginAsync<FamilyModuleOptions> = async (app, options) => {
-  app.addHook('preHandler', async (request, reply) => {
-    if (request.routeOptions.url === '/api/v1/health') {
-      return
-    }
-    await app.authenticate(request, reply)
-  })
-
   await app.register(healthRoutes)
-  await app.register(familyRoutes)
-  await app.register(contactRoutes)
-  await app.register(childRoutes)
-  await app.register(linkRoutes)
-  await app.register(relationshipTypeRoutes)
-  if (options.extraRoutes !== undefined) {
-    await app.register(options.extraRoutes)
-  }
+
+  await app.register(async (staffScope) => {
+    staffScope.addHook('onRequest', async (request, reply) => {
+      await staffScope.authenticate(request, reply)
+    })
+
+    await staffScope.register(familyRoutes)
+    await staffScope.register(contactRoutes)
+    await staffScope.register(childRoutes)
+    await staffScope.register(linkRoutes)
+    await staffScope.register(relationshipTypeRoutes)
+    if (options.extraRoutes !== undefined) {
+      await staffScope.register(options.extraRoutes)
+    }
+  })
 }
 
 export default familyModule

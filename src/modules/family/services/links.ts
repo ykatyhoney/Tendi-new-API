@@ -1,9 +1,9 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../lib/api-error.js'
-import { withTransaction } from '../../../lib/with-transaction.js'
+import { withStaffTransaction } from '../../../lib/with-transaction.js'
 import { rows } from '../repositories/query.js'
 import type { LinkPreview, LinkResult, ReplaceRightsBody, RightsResult, UnlinkResult } from '../schemas/link.js'
-import { auditValue, columnChanges, insertId, lockFamilies, writeAudit } from './write/audit.js'
+import { auditValue, columnChanges, insertId, lockFamilies, writeAudit, type AuditChange } from './write/audit.js'
 import { characterLength, deriveLegacyValues, legacyColumnValue, sameLegacyValue } from './mirror/derive.js'
 import { legacyColumnLengths } from './mirror/lengths.js'
 import { loadStoredChild, loadTargetFamily } from './mirror/load.js'
@@ -68,8 +68,7 @@ export async function previewLink(pool: Pool, familyId: number, childId: number)
 }
 
 export async function linkChild(pool: Pool, staffId: number, familyId: number, childId: number): Promise<LinkResult> {
-  const affected = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const affected = await withStaffTransaction(pool, staffId, async (connection) => {
     const child = await lockChildForLink(connection, familyId, childId)
     const members = await activeMemberIds(connection, familyId)
     if (members.length === 0) {
@@ -98,8 +97,7 @@ export async function linkChild(pool: Pool, staffId: number, familyId: number, c
 }
 
 export async function unlinkChild(pool: Pool, staffId: number, childId: number): Promise<UnlinkResult> {
-  await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  await withStaffTransaction(pool, staffId, async (connection) => {
     const peeked = await readChild(connection, childId)
     if (peeked?.familyId !== null && peeked?.familyId !== undefined) {
       await lockFamilies(connection, [peeked.familyId])
@@ -137,11 +135,10 @@ export async function replaceRights(
   childId: number,
   body: ReplaceRightsBody,
 ): Promise<RightsResult> {
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     await requireActiveFamily(connection, familyId)
-    await requireChild(connection, childId)
+    await requireChildOf(connection, familyId, childId)
     const members = await activeMemberIds(connection, familyId)
     assertMemberSet(members, body.rights.map((row) => row.memberId))
     for (const row of body.rights) {
@@ -161,6 +158,7 @@ export async function replaceRights(
           [childId, ...members],
         )
     const byMember = new Map(existing.map((row) => [Number(row.memberId), row]))
+    const changes: AuditChange[] = []
     for (const row of body.rights) {
       const next = rightsValues(row)
       const current = byMember.get(row.memberId)
@@ -183,16 +181,16 @@ export async function replaceRights(
             next.is_payment_responsible,
           ],
         )
-        await writeAudit(connection, staffId, columnChanges('family_member_children', id, 'insert', {}, auditRights(next)))
+        changes.push(...columnChanges('family_member_children', id, 'insert', {}, auditRights(next)))
       } else {
-        const changes = columnChanges(
+        const rowChanges = columnChanges(
           'family_member_children',
           current.id,
           'update',
           auditRights(rightsFromRow(current)),
           auditRights(next),
         )
-        if (changes.length > 0) {
+        if (rowChanges.length > 0) {
           await connection.query(
             `UPDATE family_member_children
              SET receives_notifications = ?, notify_method = ?, may_collect = ?, collect_from = ?, collect_to = ?,
@@ -209,10 +207,11 @@ export async function replaceRights(
               current.id,
             ],
           )
-          await writeAudit(connection, staffId, changes)
+          changes.push(...rowChanges)
         }
       }
     }
+    await writeAudit(connection, staffId, changes)
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
     return { affected }
   })
@@ -270,10 +269,14 @@ async function requireActiveFamily(connection: PoolConnection, familyId: number)
   }
 }
 
-async function requireChild(connection: PoolConnection, childId: number): Promise<void> {
+/** Rights are set for a child of this family, or for an unlinked child before it is linked here. */
+async function requireChildOf(connection: PoolConnection, familyId: number, childId: number): Promise<void> {
   const child = await readChild(connection, childId, true)
   if (child === null || child.status === 'trash') {
     throw new ApiError(404, 'NOT_FOUND', 'Child not found')
+  }
+  if (child.familyId !== null && child.familyId !== familyId) {
+    throw new ApiError(409, 'ALREADY_LINKED', 'This child is linked to another family.', { familyId: child.familyId })
   }
 }
 

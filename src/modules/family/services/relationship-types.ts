@@ -1,6 +1,6 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../lib/api-error.js'
-import { withTransaction } from '../../../lib/with-transaction.js'
+import { withStaffTransaction } from '../../../lib/with-transaction.js'
 import { rows } from '../repositories/query.js'
 import { listActiveRelationshipTypes } from '../repositories/relationship-types.js'
 import type {
@@ -43,8 +43,7 @@ export async function createRelationshipType(
   staffId: number,
   body: CreateRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
-  await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  await withStaffTransaction(pool, staffId, async (connection) => {
     const existing = await lockType(connection, body.code)
     if (existing !== null) {
       throw new ApiError(409, 'DUPLICATE_CODE', 'That relationship code already exists.')
@@ -78,8 +77,7 @@ export async function patchRelationshipType(
   body: PatchRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
   requireChange(body.label !== undefined || body.sortOrder !== undefined || body.status !== undefined)
-  await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  await withStaffTransaction(pool, staffId, async (connection) => {
     const current = await lockType(connection, code)
     if (current === null) {
       throw new ApiError(404, 'NOT_FOUND', 'Relationship type not found')

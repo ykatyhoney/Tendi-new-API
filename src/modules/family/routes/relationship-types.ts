@@ -1,6 +1,4 @@
 import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
-import type { FastifyRequest } from 'fastify'
-import { ApiError } from '../../../lib/api-error.js'
 import {
   createRelationshipTypeBody,
   patchRelationshipTypeBody,
@@ -13,13 +11,8 @@ import {
   listRelationshipTypes,
   patchRelationshipType,
 } from '../services/relationship-types.js'
+import { staffId } from './staff.js'
 
-function staffId(request: FastifyRequest): number {
-  if (request.staff === undefined) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'A staff bearer token is required')
-  }
-  return request.staff.adminId
-}
 
 const relationshipTypeRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get(

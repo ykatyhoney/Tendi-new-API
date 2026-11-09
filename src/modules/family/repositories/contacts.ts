@@ -1,8 +1,8 @@
 import type { Pool, RowDataPacket } from 'mysql2/promise'
 import { likeContains } from '../../../lib/like.js'
 import { phoneSearchKey } from '../../../lib/phone.js'
-import { contactIdsForPhone } from './phones.js'
-import { placeholders, rows } from './query.js'
+import { PHONE_LOOKUP_SQL } from './phones.js'
+import { placeholders, rows, unionOf, type SearchMatch } from './query.js'
 
 export interface ContactRow extends RowDataPacket {
   id: number
@@ -61,83 +61,52 @@ export interface HouseholdRow extends RowDataPacket {
   sortOrder: number
 }
 
-interface IdRow extends RowDataPacket {
-  id: number
-}
-
-export async function searchContactIds(db: Pool, query: string): Promise<number[] | 'all'> {
+/** Contacts whose name or any phone matches the query, as one UNION. */
+function contactMatch(query: string): SearchMatch | null {
   const q = query.trim()
   if (q.length === 0) {
-    return 'all'
+    return null
   }
-  const ids = new Set<number>()
   const like = likeContains(q)
-  const byName = await rows<IdRow>(
-    db,
-    `SELECT id FROM family_contacts
-     WHERE status = 'active'
-       AND (fname LIKE ? ESCAPE '\\\\' OR lname LIKE ? ESCAPE '\\\\' OR legacy_full_name LIKE ? ESCAPE '\\\\')`,
-    [like, like, like],
-  )
-  for (const row of byName) {
-    ids.add(Number(row.id))
-  }
+  const branches: SearchMatch[] = [
+    {
+      sql: `SELECT id FROM family_contacts
+            WHERE fname LIKE ? ESCAPE '\\\\' OR lname LIKE ? ESCAPE '\\\\' OR legacy_full_name LIKE ? ESCAPE '\\\\'`,
+      params: [like, like, like],
+    },
+  ]
   const phoneKey = phoneSearchKey(q)
   if (phoneKey !== null) {
-    const active = await activeContactIds(db, await contactIdsForPhone(db, phoneKey))
-    for (const id of active) {
-      ids.add(id)
-    }
+    branches.push({ sql: PHONE_LOOKUP_SQL, params: [phoneKey] })
   }
-  return [...ids]
-}
-
-async function activeContactIds(db: Pool, contactIds: readonly number[]): Promise<number[]> {
-  if (contactIds.length === 0) {
-    return []
-  }
-  const found = await rows<IdRow>(
-    db,
-    `SELECT id FROM family_contacts WHERE status = 'active' AND id IN (${placeholders(contactIds.length)})`,
-    contactIds,
-  )
-  return found.map((row) => Number(row.id))
+  return unionOf(branches)
 }
 
 export async function pageContacts(
   db: Pool,
-  ids: readonly number[] | 'all',
+  query: string,
   page: number,
   pageSize: number,
 ): Promise<{ total: number; contacts: ContactRow[] }> {
-  const offset = (page - 1) * pageSize
-  const columns = `id, fname, lname, legacy_full_name AS legacyFullName, hebrew_name AS hebrewName,
-                   occupation, employer, note`
-  if (ids === 'all') {
-    const totals = await rows<RowDataPacket>(
+  const match = contactMatch(query)
+  const from =
+    match === null
+      ? `FROM family_contacts AS c WHERE c.status = 'active'`
+      : `FROM family_contacts AS c INNER JOIN (${match.sql}) AS hit ON hit.id = c.id WHERE c.status = 'active'`
+  const params = match?.params ?? []
+  const [totals, contacts] = await Promise.all([
+    rows<RowDataPacket>(db, `SELECT COUNT(*) AS total ${from}`, params),
+    rows<ContactRow>(
       db,
-      `SELECT COUNT(*) AS total FROM family_contacts WHERE status = 'active'`,
-    )
-    const contacts = await rows<ContactRow>(
-      db,
-      `SELECT ${columns} FROM family_contacts WHERE status = 'active' ORDER BY lname, fname, id LIMIT ? OFFSET ?`,
-      [pageSize, offset],
-    )
-    return { total: Number(totals[0]?.['total'] ?? 0), contacts }
-  }
-  if (ids.length === 0) {
-    return { total: 0, contacts: [] }
-  }
-  const contacts = await rows<ContactRow>(
-    db,
-    `SELECT ${columns}
-     FROM family_contacts
-     WHERE status = 'active' AND id IN (${placeholders(ids.length)})
-     ORDER BY lname, fname, id
-     LIMIT ? OFFSET ?`,
-    [...ids, pageSize, offset],
-  )
-  return { total: ids.length, contacts }
+      `SELECT c.id, c.fname, c.lname, c.legacy_full_name AS legacyFullName, c.hebrew_name AS hebrewName,
+              c.occupation, c.employer, c.note
+       ${from}
+       ORDER BY c.lname, c.fname, c.id
+       LIMIT ? OFFSET ?`,
+      [...params, pageSize, (page - 1) * pageSize],
+    ),
+  ])
+  return { total: Number(totals[0]?.['total'] ?? 0), contacts }
 }
 
 export async function findActiveContact(db: Pool, id: number): Promise<ContactRow | null> {

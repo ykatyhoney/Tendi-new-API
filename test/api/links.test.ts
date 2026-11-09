@@ -205,6 +205,30 @@ describe('link, unlink, preview and rights', () => {
     }
   })
 
+  it('refuses rights for a child linked to another family', async () => {
+    const [rows] = await connection.query<RowDataPacket[]>(
+      `SELECT c.id AS childId, c.family_id AS linkedFamilyId,
+              (SELECT f.id FROM families AS f WHERE f.status = 'active' AND f.id <> c.family_id ORDER BY f.id LIMIT 1) AS otherFamilyId
+       FROM children AS c
+       WHERE c.family_id IS NOT NULL AND c.status <> 'trash'
+       ORDER BY c.id
+       LIMIT 1`,
+    )
+    const childId = Number(rows[0]?.['childId'])
+    const otherFamilyId = Number(rows[0]?.['otherFamilyId'])
+    const refused = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/families/${otherFamilyId}/children/${childId}/rights`,
+      headers: auth,
+      payload: { rights: [] },
+    })
+    expect(refused.statusCode).toBe(409)
+    expect(refused.json()).toMatchObject({
+      code: 'ALREADY_LINKED',
+      details: { familyId: Number(rows[0]?.['linkedFamilyId']) },
+    })
+  })
+
   it('saves rights for every member and re-mirrors a linked child', async () => {
     const [samples] = await connection.query<RowDataPacket[]>(
       `SELECT c.id AS childId, c.family_id AS familyId

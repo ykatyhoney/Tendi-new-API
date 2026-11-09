@@ -1,6 +1,4 @@
 import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
-import type { FastifyRequest } from 'fastify'
-import { ApiError } from '../../../lib/api-error.js'
 import { childParams } from '../schemas/family.js'
 import {
   familyChildParams,
@@ -11,13 +9,8 @@ import {
   unlinkResult,
 } from '../schemas/link.js'
 import { linkChild, previewLink, replaceRights, unlinkChild } from '../services/links.js'
+import { staffId } from './staff.js'
 
-function staffId(request: FastifyRequest): number {
-  if (request.staff === undefined) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'A staff bearer token is required')
-  }
-  return request.staff.adminId
-}
 
 const linkRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.put(

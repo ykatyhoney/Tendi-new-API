@@ -1,8 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import mysql from 'mysql2/promise'
 import { loadConfig } from '../src/config/env.js'
 import { assertFamilyDatabase } from '../src/lib/database-target.js'
+import { createFamilyPool } from '../src/lib/pool.js'
 import {
   formatDifferenceTable,
   reconcileDatabase,
@@ -12,10 +12,20 @@ import {
 export interface ReconcileCommand {
   childId?: number
   fix: boolean
+  /** The staff member a fix is recorded under. Required with --fix. */
+  adminId?: number
+}
+
+function positiveId(flag: string, raw: string | undefined): number {
+  if (raw === undefined || !/^[1-9]\d*$/.test(raw)) {
+    throw new Error(`${flag} needs a positive integer id.`)
+  }
+  return Number(raw)
 }
 
 export function parseReconcileArgs(argv: readonly string[]): ReconcileCommand {
   let childId: number | undefined
+  let adminId: number | undefined
   let fix = false
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -24,20 +34,28 @@ export function parseReconcileArgs(argv: readonly string[]): ReconcileCommand {
       continue
     }
     if (arg === '--child') {
-      const raw = argv[index + 1]
-      if (raw === undefined || !/^[1-9]\d*$/.test(raw)) {
-        throw new Error('--child needs a positive integer id.')
-      }
-      childId = Number(raw)
+      childId = positiveId('--child', argv[index + 1])
       index += 1
       continue
     }
-    throw new Error(`Unknown argument ${arg ?? ''}. Use family:reconcile [--child <id>] [--fix].`)
+    if (arg === '--admin') {
+      adminId = positiveId('--admin', argv[index + 1])
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown argument ${arg ?? ''}. Use family:reconcile [--child <id>] [--fix --admin <id>].`)
   }
   if (fix && childId === undefined) {
     throw new Error('--fix needs --child <id>.')
   }
-  return childId === undefined ? { fix } : { fix, childId }
+  if (fix && adminId === undefined) {
+    throw new Error('--fix needs --admin <id>, the staff member the fix is recorded under.')
+  }
+  return {
+    fix,
+    ...(childId === undefined ? {} : { childId }),
+    ...(adminId === undefined ? {} : { adminId }),
+  }
 }
 
 export function reconcileReportPath(date = new Date()): string {
@@ -59,34 +77,13 @@ async function main(): Promise<void> {
   const command = parseReconcileArgs(process.argv.slice(2))
   const config = await loadConfig()
   assertFamilyDatabase(config.db.name)
-  const pool = mysql.createPool({
-    host: config.db.host,
-    port: config.db.port,
-    database: config.db.name,
-    user: config.db.user,
-    password: config.db.password,
-    charset: 'utf8mb4',
-    dateStrings: true,
-    timezone: 'Z',
-    supportBigNumbers: true,
-    namedPlaceholders: true,
-    connectionLimit: config.db.poolSize,
-    typeCast(field, next) {
-      if (field.type === 'BIT' && field.length === 1) {
-        const value = field.buffer()
-        if (value == null || value.length === 0) {
-          return null
-        }
-        return value[0] ?? 0
-      }
-      return next()
-    },
-  })
+  const pool = createFamilyPool(config.db)
   try {
     const report = await reconcileDatabase(pool, {
       database: config.db.name,
       ...(command.childId === undefined ? {} : { childId: command.childId }),
       fix: command.fix,
+      ...(command.adminId === undefined ? {} : { auditUser: command.adminId }),
     })
     const file = reconcileReportPath()
     writeReconcileReport(report, file)

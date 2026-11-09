@@ -14,3 +14,16 @@ export async function rows<T extends RowDataPacket>(
 export function placeholders(count: number): string {
   return new Array(count).fill('?').join(', ')
 }
+
+/** SQL that selects matching ids as `id`, with its placeholder values. */
+export interface SearchMatch {
+  sql: string
+  params: unknown[]
+}
+
+export function unionOf(branches: readonly SearchMatch[]): SearchMatch {
+  return {
+    sql: branches.map((branch) => branch.sql).join('\n     UNION\n     '),
+    params: branches.flatMap((branch) => branch.params),
+  }
+}

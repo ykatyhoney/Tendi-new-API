@@ -20,6 +20,11 @@ const pool = mysql.createPool({
   connectionLimit: 4,
 })
 
+const [adminRows] = await pool.query<RowDataPacket[]>(
+  `SELECT id FROM admin WHERE status = 'active' ORDER BY id LIMIT 1`,
+)
+const auditUser = Number(adminRows[0]?.['id'])
+
 afterAll(async () => {
   await pool.end()
 })
@@ -59,7 +64,7 @@ describe('family reconcile', () => {
         expect.objectContaining({ child: childId, column: 'father_phone', stored: fatherPhone, derived: marker }),
       ])
 
-      const fixed = await reconcileDatabase(pool, { database: TEST_DATABASE, childId, fix: true })
+      const fixed = await reconcileDatabase(pool, { database: TEST_DATABASE, childId, fix: true, auditUser })
       expect(fixed.differences).toEqual([])
       const [mirrored] = await pool.query<RowDataPacket[]>(
         `SELECT father_phone AS fatherPhone FROM children WHERE id = ?`,
@@ -68,7 +73,7 @@ describe('family reconcile', () => {
       expect(mirrored[0]?.['fatherPhone']).toBe(marker)
     } finally {
       await pool.query(`UPDATE family_contact_phones SET phone = ? WHERE id = ?`, [phone, phoneId])
-      await reconcileDatabase(pool, { database: TEST_DATABASE, childId, fix: true })
+      await reconcileDatabase(pool, { database: TEST_DATABASE, childId, fix: true, auditUser })
       const [restored] = await pool.query<RowDataPacket[]>(
         `SELECT father_phone AS fatherPhone FROM children WHERE id = ?`,
         [childId],

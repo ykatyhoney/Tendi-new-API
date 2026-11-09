@@ -1,5 +1,4 @@
 import { type FastifyPluginAsyncTypebox } from '@fastify/type-provider-typebox'
-import type { FastifyRequest } from 'fastify'
 import { ApiError } from '../../../lib/api-error.js'
 import {
   contactDetail,
@@ -14,13 +13,8 @@ import {
 } from '../schemas/contact.js'
 import { getContact, searchContacts } from '../services/contacts.js'
 import { patchContact, replaceAddresses, replaceEmails, replacePhones } from '../services/write/contacts.js'
+import { staffId } from './staff.js'
 
-function staffId(request: FastifyRequest): number {
-  if (request.staff === undefined) {
-    throw new ApiError(401, 'UNAUTHORIZED', 'A staff bearer token is required')
-  }
-  return request.staff.adminId
-}
 
 const contactRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get(

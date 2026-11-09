@@ -1,6 +1,6 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../../lib/api-error.js'
-import { withTransaction } from '../../../../lib/with-transaction.js'
+import { withStaffTransaction } from '../../../../lib/with-transaction.js'
 import { rows } from '../../repositories/query.js'
 import type {
   CreateFamilyBody,
@@ -38,8 +38,7 @@ interface ContactRecord extends RowDataPacket {
 
 export async function createFamily(pool: Pool, staffId: number, body: CreateFamilyBody): Promise<FamilyWriteResult> {
   const householdPhone = body.householdPhone ?? ''
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     const familyId = await insertId(
       connection,
       `INSERT INTO families (name, household_phone, status, created_at, updated_at, created_by, updated_by)
@@ -72,10 +71,12 @@ export async function patchFamily(
   body: PatchFamilyBody,
 ): Promise<FamilyWriteResult> {
   requireChange(body.name !== undefined || body.householdPhone !== undefined || body.status !== undefined)
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const current = await loadFamily(connection, familyId)
+    if (body.status === 'trash' && current.status !== 'trash') {
+      await refuseLinkedChildren(connection, familyId)
+    }
     const next = {
       name: body.name ?? current.name,
       household_phone: body.householdPhone ?? current.householdPhone,
@@ -113,8 +114,7 @@ export async function createMember(
   familyId: number,
   body: CreateMemberBody,
 ): Promise<FamilyWriteResult> {
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -142,8 +142,7 @@ export async function patchMember(
   body: PatchMemberBody,
 ): Promise<FamilyWriteResult> {
   requireChange(body.relationship !== undefined || body.isPrimary !== undefined || body.sortOrder !== undefined)
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -191,8 +190,7 @@ export async function deleteMember(
   familyId: number,
   memberId: number,
 ): Promise<FamilyWriteResult> {
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -453,7 +451,36 @@ async function clearOtherPrimaries(
   )
 }
 
+/**
+ * Locks every household this contact belongs to, then the contact.
+ * The membership list is read again after each lock, because a household can gain this contact while
+ * the save waits. Adding a member locks the contact, so once the contact is locked the list is final.
+ */
 export async function lockContactFamilies(connection: PoolConnection, contactId: number): Promise<void> {
-  await lockFamilies(connection, await familyIdsForContact(connection, contactId))
-  await lockContact(connection, contactId)
+  const locked = new Set<number>()
+  let contactLocked = false
+  for (;;) {
+    const fresh = (await familyIdsForContact(connection, contactId)).filter((id) => !locked.has(id))
+    if (fresh.length === 0 && contactLocked) {
+      return
+    }
+    await lockFamilies(connection, fresh)
+    for (const id of fresh) {
+      locked.add(id)
+    }
+    if (!contactLocked) {
+      await lockContact(connection, contactId)
+      contactLocked = true
+    }
+  }
+}
+
+/** A household with linked children keeps mirroring them, so it cannot be trashed until they are unlinked. */
+async function refuseLinkedChildren(connection: PoolConnection, familyId: number): Promise<void> {
+  const linked = await affectedChildIdsForFamily(connection, familyId)
+  if (linked.length > 0) {
+    throw new ApiError(409, 'HAS_LINKED_CHILDREN', `Unlink this family's children before trashing it.`, {
+      childIds: linked,
+    })
+  }
 }

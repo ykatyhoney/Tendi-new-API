@@ -1,6 +1,6 @@
 import type { Pool, RowDataPacket } from 'mysql2/promise'
 import { rows } from '../../repositories/query.js'
-import { withTransaction } from '../../../../lib/with-transaction.js'
+import { withStaffTransaction } from '../../../../lib/with-transaction.js'
 import { deriveLegacyValues, legacyColumnValue, sameLegacyValue } from './derive.js'
 import { loadChildren, type LoadedChild } from './load.js'
 import { writeMirror } from './write.js'
@@ -58,18 +58,25 @@ export function formatDifferenceTable(differences: readonly MirrorDifference[]):
  */
 export async function reconcileDatabase(
   pool: Pool,
-  options: { database: string; childId?: number; fix?: boolean },
+  options: { database: string; childId?: number; fix?: boolean; auditUser?: number },
 ): Promise<ReconcileReport> {
   const fix = options.fix === true
   if (fix && options.childId === undefined) {
     throw new Error('--fix needs --child <id>.')
   }
+  if (fix && options.auditUser === undefined) {
+    throw new Error('--fix needs --admin <id>.')
+  }
+  if (options.auditUser !== undefined) {
+    await requireActiveAdmin(pool, options.auditUser)
+  }
   if (options.childId !== undefined) {
     await requireLinkedChild(pool, options.childId)
   }
-  if (fix && options.childId !== undefined) {
+  if (fix && options.childId !== undefined && options.auditUser !== undefined) {
     const childId = options.childId
-    await withTransaction(pool, async (connection) => {
+    // @audit_user, so the legacy ra_* triggers record the fix under this staff member.
+    await withStaffTransaction(pool, options.auditUser, async (connection) => {
       await writeMirror(connection, [childId])
     })
   }
@@ -95,5 +102,12 @@ async function requireLinkedChild(pool: Pool, childId: number): Promise<void> {
   }
   if (child['familyId'] === null) {
     throw new Error(`Child ${childId} is not linked.`)
+  }
+}
+
+async function requireActiveAdmin(pool: Pool, adminId: number): Promise<void> {
+  const found = await rows<RowDataPacket>(pool, `SELECT id, status FROM admin WHERE id = ?`, [adminId])
+  if (found[0] === undefined || found[0]['status'] !== 'active') {
+    throw new Error(`Admin ${adminId} was not found or is not active.`)
   }
 }

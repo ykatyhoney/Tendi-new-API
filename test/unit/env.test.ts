@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { loadConfig } from '../../src/config/env.js'
 
 const isolated = { dotenv: false, env: false } as const
+const productionSettings = { FAMILY_DB_PASSWORD: 'secret', CORS_ORIGIN: 'https://tendi.example' }
 
 describe('loadConfig', () => {
   it('applies the local defaults when no environment is set', async () => {
@@ -23,6 +24,7 @@ describe('loadConfig', () => {
       corsOrigins: ['http://127.0.0.1:3001'],
       allowedStaffTypes: ['admin', 'office'],
       relationshipAdminTypes: ['admin', 'superadmin'],
+      trustProxy: false,
     })
   })
 
@@ -51,10 +53,32 @@ describe('loadConfig', () => {
   it('allows a remote database host in production', async () => {
     const config = await loadConfig({
       ...isolated,
-      data: { NODE_ENV: 'production', DB_HOST: '10.0.0.8' },
+      data: { NODE_ENV: 'production', DB_HOST: '10.0.0.8', ...productionSettings },
     })
     expect(config.nodeEnv).toBe('production')
     expect(config.db.host).toBe('10.0.0.8')
+  })
+
+  it('requires a database password and a non-local CORS origin in production', async () => {
+    await expect(
+      loadConfig({ ...isolated, data: { NODE_ENV: 'production', CORS_ORIGIN: productionSettings.CORS_ORIGIN } }),
+    ).rejects.toThrow(/FAMILY_DB_PASSWORD must be set/)
+    await expect(
+      loadConfig({ ...isolated, data: { NODE_ENV: 'production', FAMILY_DB_PASSWORD: 'secret' } }),
+    ).rejects.toThrow(/CORS_ORIGIN must not list a local origin/)
+    await expect(
+      loadConfig({ ...isolated, data: { NODE_ENV: 'production', FAMILY_DB_PASSWORD: 'secret', CORS_ORIGIN: ' , ' } }),
+    ).rejects.toThrow(/CORS_ORIGIN must list/)
+  })
+
+  it('reads TRUST_PROXY as off, on, a hop count, or a list of proxies', async () => {
+    const read = async (value: string) =>
+      (await loadConfig({ ...isolated, data: { TRUST_PROXY: value } })).trustProxy
+    expect(await read('')).toBe(false)
+    expect(await read('false')).toBe(false)
+    expect(await read('true')).toBe(true)
+    expect(await read('2')).toBe(2)
+    expect(await read('10.0.0.1, 10.0.0.0/8')).toEqual(['10.0.0.1', '10.0.0.0/8'])
   })
 
   it('rejects an empty staff type list', async () => {

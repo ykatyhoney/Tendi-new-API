@@ -1,7 +1,8 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../../lib/api-error.js'
-import { withTransaction } from '../../../../lib/with-transaction.js'
-import { rows } from '../../repositories/query.js'
+import { quoteIdentifier } from '../../../../lib/sql.js'
+import { withStaffTransaction } from '../../../../lib/with-transaction.js'
+import { placeholders, rows } from '../../repositories/query.js'
 import type {
   ContactWriteResult,
   PatchContactBody,
@@ -12,7 +13,7 @@ import type {
 import { getContact } from '../contacts.js'
 import { affectedChildIdsForContact } from '../mirror/affected.js'
 import { writeMirror } from '../mirror/write.js'
-import { auditValue, columnChanges, insertId, writeAudit } from './audit.js'
+import { auditValue, columnChanges, insertId, writeAudit, type AuditChange } from './audit.js'
 import { lockContactFamilies } from './families.js'
 import { assertOnePrimary, legacyFullName, requireChange, typeLabelFor } from './rules.js'
 
@@ -26,37 +27,6 @@ interface ContactRecord extends RowDataPacket {
   employer: string
   note: string | null
   status: 'active' | 'trash'
-}
-
-interface PhoneRecord extends RowDataPacket {
-  id: number
-  phone: string
-  type: string
-  typeLabel: string | null
-  channel: string
-  isPrimary: number
-  sortOrder: number
-}
-
-interface EmailRecord extends RowDataPacket {
-  id: number
-  email: string
-  type: string
-  typeLabel: string | null
-  isPrimary: number
-  sortOrder: number
-}
-
-interface AddressRecord extends RowDataPacket {
-  id: number
-  type: string
-  typeLabel: string | null
-  line1: string
-  line2: string
-  city: string
-  state: string
-  zip: string
-  isPrimary: number
 }
 
 export async function patchContact(
@@ -73,8 +43,7 @@ export async function patchContact(
       body.employer !== undefined ||
       body.note !== undefined,
   )
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  const affected = await withStaffTransaction(pool, staffId, async (connection) => {
     const current = await lockActiveContact(connection, contactId)
     const fname = body.fname ?? current.fname
     const lname = body.lname ?? current.lname
@@ -125,10 +94,45 @@ export async function patchContact(
       )
       await writeAudit(connection, staffId, changes)
     }
-    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
-    return { affected }
+    return writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
   })
-  return finishContact(pool, contactId, saved.affected)
+  return finishContact(pool, contactId, affected)
+}
+
+type ListTable = 'family_contact_phones' | 'family_contact_emails' | 'family_contact_addresses'
+
+/** One row of a contact's phone, email, or address list, keyed by column name. */
+type ListValues = Record<string, string | number | null>
+
+interface ListItem {
+  id: number | undefined
+  values: ListValues
+}
+
+interface ListSpec {
+  table: ListTable
+  /** What the list holds, for error messages. */
+  noun: string
+  /** Every written column except id and family_contact_id. is_primary must be one of them. */
+  columns: readonly string[]
+}
+
+const PHONES: ListSpec = {
+  table: 'family_contact_phones',
+  noun: 'phone',
+  columns: ['phone', 'type', 'type_label', 'channel', 'is_primary', 'sort_order'],
+}
+
+const EMAILS: ListSpec = {
+  table: 'family_contact_emails',
+  noun: 'email',
+  columns: ['email', 'type', 'type_label', 'is_primary', 'sort_order'],
+}
+
+const ADDRESSES: ListSpec = {
+  table: 'family_contact_addresses',
+  noun: 'address',
+  columns: ['type', 'type_label', 'line1', 'line2', 'city', 'state', 'zip', 'is_primary'],
 }
 
 export async function replacePhones(
@@ -137,60 +141,26 @@ export async function replacePhones(
   contactId: number,
   body: ReplacePhonesBody,
 ): Promise<ContactWriteResult> {
-  const phones = body.phones.map((phone) => {
-    const type = phone.type ?? 'mobile'
-    return {
-      phone: phone.phone,
-      type,
-      typeLabel: typeLabelFor(type, phone.typeLabel),
-      channel: phone.channel ?? 'sms',
-      isPrimary: phone.isPrimary === true ? 1 : 0,
-      sortOrder: phone.sortOrder ?? 0,
-    }
-  })
-  assertOnePrimary(phones.length, phones.filter((phone) => phone.isPrimary === 1).length)
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
-    await lockActiveContact(connection, contactId)
-    const old = await rows<PhoneRecord>(
-      connection,
-      `SELECT id, phone, type, type_label AS typeLabel, channel, is_primary AS isPrimary, sort_order AS sortOrder
-       FROM family_contact_phones WHERE family_contact_id = ? ORDER BY id`,
-      [contactId],
-    )
-    await connection.query(`DELETE FROM family_contact_phones WHERE family_contact_id = ?`, [contactId])
-    await writeAudit(
-      connection,
-      staffId,
-      old.flatMap((phone) =>
-        columnChanges('family_contact_phones', phone.id, 'delete', phoneValues(phone), blankPhone()),
-      ),
-    )
-    for (const phone of phones) {
-      const id = await insertId(
-        connection,
-        `INSERT INTO family_contact_phones
-           (family_contact_id, phone, type, type_label, channel, is_primary, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [contactId, phone.phone, phone.type, phone.typeLabel, phone.channel, phone.isPrimary, phone.sortOrder],
-      )
-      await writeAudit(
-        connection,
-        staffId,
-        columnChanges('family_contact_phones', id, 'insert', blankPhone(), {
+  return replaceList(
+    pool,
+    staffId,
+    contactId,
+    PHONES,
+    body.phones.map((phone) => {
+      const type = phone.type ?? 'mobile'
+      return {
+        id: phone.id,
+        values: {
           phone: phone.phone,
-          type: phone.type,
-          type_label: phone.typeLabel,
-          channel: phone.channel,
-          is_primary: auditValue(phone.isPrimary),
-          sort_order: auditValue(phone.sortOrder),
-        }),
-      )
-    }
-    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
-    return { affected }
-  })
-  return finishContact(pool, contactId, saved.affected)
+          type,
+          type_label: typeLabelFor(type, phone.typeLabel),
+          channel: phone.channel ?? 'sms',
+          is_primary: phone.isPrimary === true ? 1 : 0,
+          sort_order: phone.sortOrder ?? 0,
+        },
+      }
+    }),
+  )
 }
 
 export async function replaceEmails(
@@ -199,58 +169,25 @@ export async function replaceEmails(
   contactId: number,
   body: ReplaceEmailsBody,
 ): Promise<ContactWriteResult> {
-  const emails = body.emails.map((email) => {
-    const type = email.type ?? 'personal'
-    return {
-      email: email.email,
-      type,
-      typeLabel: typeLabelFor(type, email.typeLabel),
-      isPrimary: email.isPrimary === true ? 1 : 0,
-      sortOrder: email.sortOrder ?? 0,
-    }
-  })
-  assertOnePrimary(emails.length, emails.filter((email) => email.isPrimary === 1).length)
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
-    await lockActiveContact(connection, contactId)
-    const old = await rows<EmailRecord>(
-      connection,
-      `SELECT id, email, type, type_label AS typeLabel, is_primary AS isPrimary, sort_order AS sortOrder
-       FROM family_contact_emails WHERE family_contact_id = ? ORDER BY id`,
-      [contactId],
-    )
-    await connection.query(`DELETE FROM family_contact_emails WHERE family_contact_id = ?`, [contactId])
-    await writeAudit(
-      connection,
-      staffId,
-      old.flatMap((email) =>
-        columnChanges('family_contact_emails', email.id, 'delete', emailValues(email), blankEmail()),
-      ),
-    )
-    for (const email of emails) {
-      const id = await insertId(
-        connection,
-        `INSERT INTO family_contact_emails
-           (family_contact_id, email, type, type_label, is_primary, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [contactId, email.email, email.type, email.typeLabel, email.isPrimary, email.sortOrder],
-      )
-      await writeAudit(
-        connection,
-        staffId,
-        columnChanges('family_contact_emails', id, 'insert', blankEmail(), {
+  return replaceList(
+    pool,
+    staffId,
+    contactId,
+    EMAILS,
+    body.emails.map((email) => {
+      const type = email.type ?? 'personal'
+      return {
+        id: email.id,
+        values: {
           email: email.email,
-          type: email.type,
-          type_label: email.typeLabel,
-          is_primary: auditValue(email.isPrimary),
-          sort_order: auditValue(email.sortOrder),
-        }),
-      )
-    }
-    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
-    return { affected }
-  })
-  return finishContact(pool, contactId, saved.affected)
+          type,
+          type_label: typeLabelFor(type, email.typeLabel),
+          is_primary: email.isPrimary === true ? 1 : 0,
+          sort_order: email.sortOrder ?? 0,
+        },
+      }
+    }),
+  )
 }
 
 export async function replaceAddresses(
@@ -259,74 +196,170 @@ export async function replaceAddresses(
   contactId: number,
   body: ReplaceAddressesBody,
 ): Promise<ContactWriteResult> {
-  const addresses = body.addresses.map((address) => {
-    const type = address.type ?? 'home'
-    return {
-      type,
-      typeLabel: typeLabelFor(type, address.typeLabel),
-      line1: address.line1 ?? '',
-      line2: address.line2 ?? '',
-      city: address.city ?? '',
-      state: address.state ?? '',
-      zip: address.zip ?? '',
-      isPrimary: address.isPrimary === true ? 1 : 0,
-    }
-  })
-  assertOnePrimary(addresses.length, addresses.filter((address) => address.isPrimary === 1).length)
-  const saved = await withTransaction(pool, async (connection) => {
-    await connection.query('SET @audit_user = ?', [staffId])
+  return replaceList(
+    pool,
+    staffId,
+    contactId,
+    ADDRESSES,
+    body.addresses.map((address) => {
+      const type = address.type ?? 'home'
+      return {
+        id: address.id,
+        values: {
+          type,
+          type_label: typeLabelFor(type, address.typeLabel),
+          line1: address.line1 ?? '',
+          line2: address.line2 ?? '',
+          city: address.city ?? '',
+          state: address.state ?? '',
+          zip: address.zip ?? '',
+          is_primary: address.isPrimary === true ? 1 : 0,
+        },
+      }
+    }),
+  )
+}
+
+/**
+ * Replaces a contact's phone, email, or address list and keeps row ids where it can.
+ * An item with an id updates that row. An item without one keeps an identical existing row, or is inserted.
+ * Rows that no item claims are deleted. Only changed columns are written and audited.
+ */
+async function replaceList(
+  pool: Pool,
+  staffId: number,
+  contactId: number,
+  spec: ListSpec,
+  items: readonly ListItem[],
+): Promise<ContactWriteResult> {
+  assertOnePrimary(items.length, items.filter((item) => item.values['is_primary'] === 1).length)
+  const affected = await withStaffTransaction(pool, staffId, async (connection) => {
     await lockActiveContact(connection, contactId)
-    const old = await rows<AddressRecord>(
+    const existing = await rows<RowDataPacket>(
       connection,
-      `SELECT id, type, type_label AS typeLabel, line1, line2, city, state, zip, is_primary AS isPrimary
-       FROM family_contact_addresses WHERE family_contact_id = ? ORDER BY id`,
+      `SELECT id, ${spec.columns.map((column) => quoteIdentifier(column)).join(', ')}
+       FROM ${quoteIdentifier(spec.table)}
+       WHERE family_contact_id = ?
+       ORDER BY id
+       FOR UPDATE`,
       [contactId],
     )
-    await connection.query(`DELETE FROM family_contact_addresses WHERE family_contact_id = ?`, [contactId])
-    await writeAudit(
-      connection,
-      staffId,
-      old.flatMap((address) =>
-        columnChanges('family_contact_addresses', address.id, 'delete', addressValues(address), blankAddress()),
-      ),
+    const stored = new Map<number, ListValues>(
+      existing.map((row) => [Number(row['id']), pick(spec.columns, row)]),
     )
-    for (const address of addresses) {
+    const plan = planList(spec, stored, items)
+    const changes: AuditChange[] = []
+
+    if (plan.deletes.length > 0) {
+      await connection.query(
+        `DELETE FROM ${quoteIdentifier(spec.table)} WHERE id IN (${placeholders(plan.deletes.length)})`,
+        plan.deletes,
+      )
+      for (const id of plan.deletes) {
+        changes.push(...columnChanges(spec.table, id, 'delete', auditRow(stored.get(id) ?? {}), blankRow(spec)))
+      }
+    }
+
+    // Demotions run before the new primary is written, so the one-primary key never sees two.
+    const updates = [...plan.updates].sort(
+      (left, right) => Number(left.values['is_primary']) - Number(right.values['is_primary']),
+    )
+    for (const update of updates) {
+      const before = stored.get(update.id) ?? {}
+      const columns = spec.columns.filter((column) => auditValue(before[column] ?? null) !== auditValue(update.values[column] ?? null))
+      if (columns.length === 0) {
+        continue
+      }
+      await connection.query(
+        `UPDATE ${quoteIdentifier(spec.table)}
+         SET ${columns.map((column) => `${quoteIdentifier(column)} = ?`).join(', ')}
+         WHERE id = ?`,
+        [...columns.map((column) => update.values[column] ?? null), update.id],
+      )
+      changes.push(...columnChanges(spec.table, update.id, 'update', auditRow(before), auditRow(update.values)))
+    }
+
+    for (const values of plan.inserts) {
       const id = await insertId(
         connection,
-        `INSERT INTO family_contact_addresses
-           (family_contact_id, type, type_label, line1, line2, city, state, zip, is_primary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          contactId,
-          address.type,
-          address.typeLabel,
-          address.line1,
-          address.line2,
-          address.city,
-          address.state,
-          address.zip,
-          address.isPrimary,
-        ],
+        `INSERT INTO ${quoteIdentifier(spec.table)}
+           (family_contact_id, ${spec.columns.map((column) => quoteIdentifier(column)).join(', ')})
+         VALUES (?, ${placeholders(spec.columns.length)})`,
+        [contactId, ...spec.columns.map((column) => values[column] ?? null)],
       )
-      await writeAudit(
-        connection,
-        staffId,
-        columnChanges('family_contact_addresses', id, 'insert', blankAddress(), {
-          type: address.type,
-          type_label: address.typeLabel,
-          line1: address.line1,
-          line2: address.line2,
-          city: address.city,
-          state: address.state,
-          zip: address.zip,
-          is_primary: auditValue(address.isPrimary),
-        }),
-      )
+      changes.push(...columnChanges(spec.table, id, 'insert', blankRow(spec), auditRow(values)))
     }
-    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
-    return { affected }
+
+    await writeAudit(connection, staffId, changes)
+    return writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
   })
-  return finishContact(pool, contactId, saved.affected)
+  return finishContact(pool, contactId, affected)
+}
+
+interface ListPlan {
+  deletes: number[]
+  updates: { id: number; values: ListValues }[]
+  inserts: ListValues[]
+}
+
+/** Matches items to stored rows: by id first, then an identical unclaimed row. Exported for unit tests. */
+export function planList(
+  spec: Pick<ListSpec, 'columns' | 'noun'>,
+  stored: ReadonlyMap<number, ListValues>,
+  items: readonly ListItem[],
+): ListPlan {
+  const claimed = new Set<number>()
+  const updates: ListPlan['updates'] = []
+  const unmatched: ListValues[] = []
+  for (const item of items) {
+    if (item.id === undefined) {
+      continue
+    }
+    if (!stored.has(item.id)) {
+      throw new ApiError(400, 'VALIDATION', `Unknown ${spec.noun} id ${item.id} for this contact.`)
+    }
+    if (claimed.has(item.id)) {
+      throw new ApiError(400, 'VALIDATION', `The ${spec.noun} id ${item.id} is listed twice.`)
+    }
+    claimed.add(item.id)
+    updates.push({ id: item.id, values: item.values })
+  }
+  for (const item of items) {
+    if (item.id !== undefined) {
+      continue
+    }
+    const same = [...stored.entries()].find(
+      ([id, values]) => !claimed.has(id) && sameRow(spec.columns, values, item.values),
+    )
+    if (same === undefined) {
+      unmatched.push(item.values)
+    } else {
+      claimed.add(same[0])
+    }
+  }
+  const deletes = [...stored.keys()].filter((id) => !claimed.has(id))
+  return { deletes, updates, inserts: unmatched }
+}
+
+function sameRow(columns: readonly string[], left: ListValues, right: ListValues): boolean {
+  return columns.every((column) => auditValue(left[column] ?? null) === auditValue(right[column] ?? null))
+}
+
+function pick(columns: readonly string[], row: RowDataPacket): ListValues {
+  const values: ListValues = {}
+  for (const column of columns) {
+    const value: unknown = row[column]
+    values[column] = value === null || value === undefined ? null : typeof value === 'number' ? value : String(value)
+  }
+  return values
+}
+
+function auditRow(values: ListValues): Record<string, string | null> {
+  return Object.fromEntries(Object.entries(values).map(([column, value]) => [column, auditValue(value)]))
+}
+
+function blankRow(spec: ListSpec): Record<string, string | null> {
+  return Object.fromEntries(spec.columns.map((column) => [column, null]))
 }
 
 async function finishContact(pool: Pool, contactId: number, affected: number[]): Promise<ContactWriteResult> {
@@ -351,59 +384,4 @@ async function lockActiveContact(connection: PoolConnection, contactId: number):
     throw new ApiError(404, 'NOT_FOUND', 'Contact not found')
   }
   return contact
-}
-
-function phoneValues(phone: PhoneRecord): Record<string, string | null> {
-  return {
-    phone: phone.phone,
-    type: phone.type,
-    type_label: phone.typeLabel,
-    channel: phone.channel,
-    is_primary: auditValue(phone.isPrimary),
-    sort_order: auditValue(phone.sortOrder),
-  }
-}
-
-function blankPhone(): Record<string, string | null> {
-  return { phone: null, type: null, type_label: null, channel: null, is_primary: null, sort_order: null }
-}
-
-function emailValues(email: EmailRecord): Record<string, string | null> {
-  return {
-    email: email.email,
-    type: email.type,
-    type_label: email.typeLabel,
-    is_primary: auditValue(email.isPrimary),
-    sort_order: auditValue(email.sortOrder),
-  }
-}
-
-function blankEmail(): Record<string, string | null> {
-  return { email: null, type: null, type_label: null, is_primary: null, sort_order: null }
-}
-
-function addressValues(address: AddressRecord): Record<string, string | null> {
-  return {
-    type: address.type,
-    type_label: address.typeLabel,
-    line1: address.line1,
-    line2: address.line2,
-    city: address.city,
-    state: address.state,
-    zip: address.zip,
-    is_primary: auditValue(address.isPrimary),
-  }
-}
-
-function blankAddress(): Record<string, string | null> {
-  return {
-    type: null,
-    type_label: null,
-    line1: null,
-    line2: null,
-    city: null,
-    state: null,
-    zip: null,
-    is_primary: null,
-  }
 }

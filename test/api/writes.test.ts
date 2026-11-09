@@ -387,6 +387,99 @@ describe('family writes', () => {
     expect(cleared.json().contact.phones).toEqual([])
   })
 
+  it('keeps row ids across a list save and audits only what changed', async () => {
+    const created = await postFamily('B12 Lists')
+    createdFamilies.push(created.family.id)
+    const added = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${created.family.id}/members`,
+      headers: auth,
+      payload: { relationship: spareType, contact: { fname: 'B12', lname: 'Lists' } },
+    })
+    expect(added.statusCode).toBe(200)
+    const contactId = added.json().family.members[0].contact.id
+    createdContacts.push(contactId)
+    const put = (phones: unknown[]) =>
+      app.inject({ method: 'PUT', url: `/api/v1/contacts/${contactId}/phones`, headers: auth, payload: { phones } })
+    const listed = [
+      { phone: '2125550111', type: 'mobile', isPrimary: true, sortOrder: 1 },
+      { phone: '2125550112', type: 'work', sortOrder: 2 },
+    ]
+
+    try {
+      const first = await put(listed)
+      expect(first.statusCode).toBe(200)
+      type Phone = { id: number; phone: string; isPrimary: boolean }
+      const firstPhones = first.json().contact.phones as Phone[]
+      const mobile = firstPhones.find((phone) => phone.phone === '2125550111')
+      const work = firstPhones.find((phone) => phone.phone === '2125550112')
+      if (mobile === undefined || work === undefined) {
+        throw new Error('The saved phones are missing.')
+      }
+      const auditRows = async () => {
+        const [found] = await connection.query<RowDataPacket[]>(
+          `SELECT action, col_name, table_id FROM audit_logs
+           WHERE table_name = 'family_contact_phones' AND table_id IN (?, ?) ORDER BY id`,
+          [mobile.id, work.id],
+        )
+        return found
+      }
+      const afterFirst = (await auditRows()).length
+
+      const same = await put(listed)
+      expect(same.statusCode).toBe(200)
+      expect((same.json().contact.phones as Phone[]).map((phone) => phone.id).sort()).toEqual([mobile.id, work.id].sort())
+      expect((await auditRows()).length).toBe(afterFirst)
+
+      const swapped = await put([
+        { id: mobile.id, phone: '2125550111', type: 'mobile', isPrimary: false, sortOrder: 1 },
+        { id: work.id, phone: '2125550112', type: 'work', isPrimary: true, sortOrder: 2 },
+      ])
+      expect(swapped.statusCode).toBe(200)
+      const swappedPhones = swapped.json().contact.phones as Phone[]
+      expect(swappedPhones.find((phone) => phone.id === work.id)?.isPrimary).toBe(true)
+      expect(swappedPhones.find((phone) => phone.id === mobile.id)?.isPrimary).toBe(false)
+      const swapAudit = (await auditRows()).slice(afterFirst)
+      expect(swapAudit.map((row) => [row['action'], row['col_name'], Number(row['table_id'])]).sort()).toEqual(
+        [
+          ['update', 'is_primary', mobile.id],
+          ['update', 'is_primary', work.id],
+        ].sort(),
+      )
+
+      const unknown = await put([{ id: 999999999, phone: '2125550111', isPrimary: true }])
+      expect(unknown.statusCode).toBe(400)
+      expect(unknown.json().code).toBe('VALIDATION')
+
+      const twice = await put([
+        { id: mobile.id, phone: '2125550111', isPrimary: true },
+        { id: mobile.id, phone: '2125550113' },
+      ])
+      expect(twice.statusCode).toBe(400)
+      expect(twice.json().code).toBe('VALIDATION')
+    } finally {
+      expect((await put([])).statusCode).toBe(200)
+    }
+  })
+
+  it('refuses to trash a family that still has linked children', async () => {
+    const [linkedRows] = await connection.query<RowDataPacket[]>(
+      `SELECT family_id AS familyId FROM children WHERE family_id IS NOT NULL ORDER BY family_id LIMIT 1`,
+    )
+    const familyId = Number(linkedRows[0]?.['familyId'])
+    const refused = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/families/${familyId}`,
+      headers: auth,
+      payload: { status: 'trash' },
+    })
+    expect(refused.statusCode).toBe(409)
+    expect(refused.json().code).toBe('HAS_LINKED_CHILDREN')
+    expect(refused.json().details.childIds.length).toBeGreaterThan(0)
+    const [status] = await connection.query<RowDataPacket[]>(`SELECT status FROM families WHERE id = ?`, [familyId])
+    expect(status[0]?.['status']).toBe('active')
+  })
+
   it('updates every linked sibling when a father mobile changes, and rolls back a value that does not fit', async () => {
     const sample = await siblingFather()
     const beforePhones = await phoneRows(sample.contactId)

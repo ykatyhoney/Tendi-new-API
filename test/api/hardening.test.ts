@@ -4,6 +4,8 @@ import mysql from 'mysql2/promise'
 import { afterAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../../src/app.js'
 import { loadConfig } from '../../src/config/env.js'
+import { loadChildren } from '../../src/modules/family/services/mirror/load.js'
+import { mirrorDifferences } from '../../src/modules/family/services/mirror/reconcile.js'
 import { issueDevToken, revokeDevTokens } from '../../scripts/dev-token.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
 
@@ -195,5 +197,94 @@ describe('hardening', () => {
       `${JSON.stringify({ familyId, childCount, saveMs, slowest, samples }, null, 2)}\n`,
     )
     expect(saveMs).toBeLessThan(300)
+  })
+
+  it('derives the mirror from the latest rows when a contact save waits behind a member save', async () => {
+    // A father in exactly one household, with a mobile, a linked child, and no other father-slot member.
+    const [picked] = await connection.query<RowDataPacket[]>(
+      `SELECT m.id AS memberId, m.family_id AS familyId, m.family_contact_id AS contactId, MIN(c.id) AS childId
+       FROM family_members AS m
+       INNER JOIN children AS c ON c.family_id = m.family_id
+       WHERE m.relationship = 'father' AND m.status = 'active'
+         AND (SELECT COUNT(*) FROM family_members AS x WHERE x.family_contact_id = m.family_contact_id AND x.status = 'active') = 1
+         AND EXISTS (SELECT 1 FROM family_contact_phones AS p WHERE p.family_contact_id = m.family_contact_id AND p.type = 'mobile')
+         AND NOT EXISTS (
+           SELECT 1 FROM family_members AS s
+           INNER JOIN relationship_types AS rt ON rt.code = s.relationship
+           WHERE s.family_id = m.family_id AND s.status = 'active' AND rt.parent_slot = 'father' AND s.id <> m.id
+         )
+       GROUP BY m.id
+       ORDER BY m.id
+       LIMIT 1`,
+    )
+    const sample = picked[0]
+    if (sample === undefined) {
+      throw new Error('tendi_family_test has no single-household father with a mobile and a linked child.')
+    }
+    const familyId = Number(sample['familyId'])
+    const memberId = Number(sample['memberId'])
+    const contactId = Number(sample['contactId'])
+    const childId = Number(sample['childId'])
+    const [spare] = await connection.query<RowDataPacket[]>(
+      `SELECT code FROM relationship_types WHERE parent_slot IS NULL AND status = 'active' ORDER BY sort_order, code LIMIT 1`,
+    )
+    const spareType = String(spare[0]?.['code'])
+
+    type Phone = { phone: string; type: string; typeLabel: string | null; channel: string; isPrimary: boolean; sortOrder: number }
+    const contact = await app.inject({ method: 'GET', url: `/api/v1/contacts/${contactId}`, headers: auth })
+    const original = (contact.json().phones as Phone[]).map((phone) => ({
+      phone: phone.phone,
+      type: phone.type,
+      typeLabel: phone.typeLabel,
+      channel: phone.channel,
+      isPrimary: phone.isPrimary,
+      sortOrder: phone.sortOrder,
+    }))
+    const changed = original.map((phone) => (phone.type === 'mobile' ? { ...phone, phone: '555-0199' } : phone))
+    const differences = async () => mirrorDifferences(await loadChildren(app.db, [childId]))
+    expect(await differences()).toEqual([])
+
+    // Hold the household lock so both saves queue behind it: first the member change, then the phone change.
+    const holder = await app.db.getConnection()
+    try {
+      await holder.beginTransaction()
+      await holder.query('SELECT id FROM families WHERE id = ? FOR UPDATE', [familyId])
+      const memberSave = app.inject({
+        method: 'PATCH',
+        url: `/api/v1/families/${familyId}/members/${memberId}`,
+        headers: auth,
+        payload: { relationship: spareType },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      const phoneSave = app.inject({
+        method: 'PUT',
+        url: `/api/v1/contacts/${contactId}/phones`,
+        headers: auth,
+        payload: { phones: changed },
+      })
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      await holder.commit()
+      const [member, phones] = await Promise.all([memberSave, phoneSave])
+      expect(member.statusCode).toBe(200)
+      expect(phones.statusCode).toBe(200)
+
+      // The phone save must see that this contact is no longer the father.
+      expect(await differences()).toEqual([])
+    } finally {
+      holder.release()
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/families/${familyId}/members/${memberId}`,
+        headers: auth,
+        payload: { relationship: 'father' },
+      })
+      await app.inject({
+        method: 'PUT',
+        url: `/api/v1/contacts/${contactId}/phones`,
+        headers: auth,
+        payload: { phones: original },
+      })
+      expect(await differences()).toEqual([])
+    }
   })
 })

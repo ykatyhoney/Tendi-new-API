@@ -149,6 +149,8 @@ export const patchContactBody = Type.Object(
 
 const phoneInput = Type.Object(
   {
+    /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
+    id: Type.Optional(Type.Integer({ minimum: 1 })),
     phone: Type.String({ minLength: 1, maxLength: 255 }),
     type: Type.Optional(
       Type.Union([Type.Literal('mobile'), Type.Literal('home'), Type.Literal('work'), Type.Literal('other')]),
@@ -165,6 +167,8 @@ const phoneInput = Type.Object(
 
 const emailInput = Type.Object(
   {
+    /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
+    id: Type.Optional(Type.Integer({ minimum: 1 })),
     email: Type.String({ minLength: 1, maxLength: 255 }),
     type: Type.Optional(Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')])),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
@@ -176,6 +180,8 @@ const emailInput = Type.Object(
 
 const addressInput = Type.Object(
   {
+    /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
+    id: Type.Optional(Type.Integer({ minimum: 1 })),
     type: Type.Optional(
       Type.Union([Type.Literal('home'), Type.Literal('work'), Type.Literal('billing'), Type.Literal('other')]),
     ),

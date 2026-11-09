@@ -44,7 +44,10 @@ export async function buildApp(options: BuildAppOptions) {
   const { config } = options
   const app = Fastify({
     bodyLimit: 100 * 1024,
-    requestIdHeader: 'x-request-id',
+    // false so genReqId always runs. With a header name set, Fastify uses the raw header
+    // and calls genReqId only when the header is missing, which skips the check below.
+    requestIdHeader: false,
+    trustProxy: trustProxyOption(config.trustProxy),
     genReqId(request) {
       const header = request.headers['x-request-id']
       if (typeof header === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(header)) {
@@ -75,4 +78,12 @@ export async function buildApp(options: BuildAppOptions) {
     ...(options.extraRoutes === undefined ? {} : { extraRoutes: options.extraRoutes }),
   })
   return app
+}
+
+/** A hop count trusts that many proxies in front of the API. Fastify's types take it as a function. */
+function trustProxyOption(value: AppConfig['trustProxy']): boolean | string[] | ((address: string, hop: number) => boolean) {
+  if (typeof value === 'number') {
+    return (_address, hop) => hop < value
+  }
+  return value
 }

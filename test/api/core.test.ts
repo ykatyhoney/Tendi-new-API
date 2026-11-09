@@ -30,6 +30,26 @@ describe('family core', () => {
     expect(response.headers['x-request-id']).toBe('health-check-1')
   })
 
+  it('replaces a request id that is not a short plain token', async () => {
+    const app = await open()
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/missing',
+      headers: { 'x-request-id': `bad <id> ${'x'.repeat(300)}` },
+    })
+    const id = String(response.headers['x-request-id'])
+    expect(id).not.toContain('<')
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  })
+
+  it('refuses a missing token before it validates the body', async () => {
+    const app = await open()
+    const response = await app.inject({ method: 'POST', url: '/api/v1/families', payload: { bogus: 1 } })
+    expect(response.statusCode).toBe(401)
+    expect(response.json()).toMatchObject({ code: 'UNAUTHORIZED' })
+    expect(response.json().details).toBeUndefined()
+  })
+
   it('shows the OpenAPI viewer outside production and hides it in production', async () => {
     const development = await open({ nodeEnv: 'development' })
     const docs = await development.inject({ method: 'GET', url: '/docs/' })

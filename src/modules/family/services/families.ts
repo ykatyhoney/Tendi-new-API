@@ -4,7 +4,6 @@ import {
   findFamily,
   listMembers,
   pageFamilies,
-  searchFamilyIds,
   type MemberRow,
 } from '../repositories/families.js'
 import { listAddresses, listEmails, listPhones } from '../repositories/contacts.js'
@@ -13,8 +12,7 @@ import type { FamilyDetail, FamilyPage, FamilySearchQuery } from '../schemas/fam
 import { asBoolean, asNumber, asNullableString, asString, contactName, groupBy } from './values.js'
 
 export async function searchFamilies(db: Pool, query: FamilySearchQuery): Promise<FamilyPage> {
-  const ids = await searchFamilyIds(db, query.q ?? '')
-  const page = await pageFamilies(db, ids, query.page, query.pageSize)
+  const page = await pageFamilies(db, query.q ?? '', query.page, query.pageSize)
   const familyIds = page.families.map((family) => asNumber(family.id))
   const [members, children] = await Promise.all([
     listMembers(db, familyIds),

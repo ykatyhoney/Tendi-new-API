@@ -35,6 +35,8 @@ export const envSchema = Type.Object({
   ALLOWED_STAFF_TYPES: Type.String({ default: 'admin,office' }),
   RELATIONSHIP_ADMIN_TYPES: Type.String({ default: 'admin,superadmin' }),
   LOG_LEVEL: logLevelSchema,
+  /** Empty or false: use the socket address. true, a hop count, or comma-separated proxy addresses. */
+  TRUST_PROXY: Type.String({ default: '' }),
 })
 
 export type RawEnv = Type.Static<typeof envSchema>
@@ -57,6 +59,8 @@ export interface AppConfig {
   corsOrigins: readonly string[]
   allowedStaffTypes: readonly string[]
   relationshipAdminTypes: readonly string[]
+  /** Passed to Fastify's trustProxy, so request.ip (and the per-IP rate limit) sees the client behind a proxy. */
+  trustProxy: boolean | number | string[]
 }
 
 export interface LoadConfigOptions {
@@ -78,6 +82,41 @@ export function assertLocalDatabaseHost(env: Pick<RawEnv, 'NODE_ENV' | 'DB_HOST'
       `DB_HOST must be 127.0.0.1 or localhost when NODE_ENV is ${env.NODE_ENV}. Refusing to start against ${env.DB_HOST}.`,
     )
   }
+}
+
+/**
+ * In production the database password must be set and CORS must not point at a local origin.
+ * Development keeps its local defaults.
+ */
+export function assertProductionSettings(env: Pick<RawEnv, 'NODE_ENV' | 'FAMILY_DB_PASSWORD' | 'CORS_ORIGIN'>): void {
+  if (env.NODE_ENV !== 'production') {
+    return
+  }
+  if (env.FAMILY_DB_PASSWORD.length === 0) {
+    throw new Error('FAMILY_DB_PASSWORD must be set when NODE_ENV is production.')
+  }
+  const origins = splitList(env.CORS_ORIGIN)
+  if (origins.length === 0) {
+    throw new Error('CORS_ORIGIN must list the Tendi-new origin when NODE_ENV is production.')
+  }
+  const local = origins.filter((origin) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(origin))
+  if (local.length > 0) {
+    throw new Error(`CORS_ORIGIN must not list a local origin when NODE_ENV is production. Got ${local.join(', ')}.`)
+  }
+}
+
+export function parseTrustProxy(value: string): boolean | number | string[] {
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.toLowerCase() === 'false') {
+    return false
+  }
+  if (trimmed.toLowerCase() === 'true') {
+    return true
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed)
+  }
+  return splitList(trimmed)
 }
 
 function requireList(name: string, value: string): string[] {
@@ -115,6 +154,7 @@ export function toAppConfig(env: RawEnv): AppConfig {
     corsOrigins: splitList(env.CORS_ORIGIN),
     allowedStaffTypes: requireList('ALLOWED_STAFF_TYPES', env.ALLOWED_STAFF_TYPES),
     relationshipAdminTypes: requireList('RELATIONSHIP_ADMIN_TYPES', env.RELATIONSHIP_ADMIN_TYPES),
+    trustProxy: parseTrustProxy(env.TRUST_PROXY),
   }
 }
 
@@ -129,6 +169,7 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<AppCo
     })
     const raw = app.getEnvs<RawEnv>()
     assertLocalDatabaseHost(raw)
+    assertProductionSettings(raw)
     return toAppConfig(raw)
   } finally {
     await app.close()
