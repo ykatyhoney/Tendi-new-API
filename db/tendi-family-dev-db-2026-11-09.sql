@@ -4,7 +4,7 @@
 --     Family API links, relinks or unlinks a child)
 --   + families drafted from the legacy parent data: 375 families, 732 contacts, 1,394 per-child rights
 --   + 624 children linked (their 28 parent columns already equal what the family data gives; nothing changed)
--- Same data as tendi-family-dev-db-2026-11-06.sql; only the lock triggers differ.
+-- Same data as the 2026-11-06 dev dump; only the lock triggers differ.
 -- The 209 existing tables hold the same data as the dump. The lock log is empty.
 -- Not included: database accounts. Create family_api with section 6 of tendi_family_module.sql.
 -- Never import into production.
