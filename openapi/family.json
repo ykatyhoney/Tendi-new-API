@@ -355,7 +355,7 @@
                   },
                   "householdPhone": {
                     "type": "string",
-                    "maxLength": 255
+                    "maxLength": 30
                   }
                 },
                 "additionalProperties": false
@@ -1344,7 +1344,7 @@
                   },
                   "householdPhone": {
                     "type": "string",
-                    "maxLength": 255
+                    "maxLength": 30
                   },
                   "status": {
                     "anyOf": [
@@ -2479,6 +2479,10 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
+                  },
+                  "allowEmptyParents": {
+                    "type": "boolean",
+                    "description": "Save even if the linked children are left with both parent slots empty (otherwise 409 NO_PARENT_SLOT)."
                   }
                 },
                 "additionalProperties": false
@@ -2991,6 +2995,24 @@
         "tags": [
           "family"
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "allowEmptyParents": {
+                    "type": "boolean",
+                    "description": "Save even if the linked children are left with both parent slots empty (otherwise 409 NO_PARENT_SLOT)."
+                  }
+                },
+                "additionalProperties": false,
+                "nullable": true
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -4510,7 +4532,7 @@
                         "phone": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 255
+                          "maxLength": 30
                         },
                         "type": {
                           "anyOf": [
@@ -5004,7 +5026,7 @@
                         "email": {
                           "type": "string",
                           "minLength": 1,
-                          "maxLength": 255
+                          "maxLength": 150
                         },
                         "type": {
                           "anyOf": [
@@ -6821,6 +6843,24 @@
         "tags": [
           "family"
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "allowEmptyParents": {
+                    "type": "boolean",
+                    "description": "Save even if the linked children are left with both parent slots empty (otherwise 409 NO_PARENT_SLOT)."
+                  }
+                },
+                "additionalProperties": false,
+                "nullable": true
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {
@@ -7110,7 +7150,7 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 32,
-                    "pattern": "^[a-z_]+$"
+                    "pattern": "^[a-z][a-z_]*$"
                   },
                   "label": {
                     "type": "string",
@@ -7297,7 +7337,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 32,
-              "pattern": "^[a-z_]+$"
+              "pattern": "^[a-z][a-z_]*$"
             },
             "in": "path",
             "name": "code",

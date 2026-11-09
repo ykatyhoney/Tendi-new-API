@@ -1,6 +1,9 @@
 import { Type } from '@fastify/type-provider-typebox'
 import { sortOrder } from './common.js'
 
+/** Lowercase letters and _, starting with a letter. */
+const RELATIONSHIP_CODE_PATTERN = '^[a-z][a-z_]*$'
+
 const relationshipType = Type.Object(
   {
     code: Type.String(),
@@ -33,12 +36,12 @@ const storedRelationshipType = Type.Object(
 )
 
 export const relationshipTypeParams = Type.Object({
-  code: Type.String({ minLength: 1, maxLength: 32, pattern: '^[a-z_]+$' }),
+  code: Type.String({ minLength: 1, maxLength: 32, pattern: RELATIONSHIP_CODE_PATTERN }),
 })
 
 export const createRelationshipTypeBody = Type.Object(
   {
-    code: Type.String({ minLength: 1, maxLength: 32, pattern: '^[a-z_]+$' }),
+    code: Type.String({ minLength: 1, maxLength: 32, pattern: RELATIONSHIP_CODE_PATTERN }),
     label: Type.String({ minLength: 1, maxLength: 64 }),
     sortOrder,
   },

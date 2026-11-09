@@ -4,3 +4,7 @@ dist/
 *.log
 results/
 coverage/
+
+# Local audit and verification reports
+LOGIC-ISSUES.md
+VERIFY-FINAL.md

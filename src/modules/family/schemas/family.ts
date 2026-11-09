@@ -1,5 +1,17 @@
 import { Type } from '@fastify/type-provider-typebox'
-import { address, email, newContact, notifyMethod, phone, recordStatus, searchQuery, sortOrder } from './common.js'
+import {
+  address,
+  email,
+  emptyParentsBody,
+  emptyParentsOption,
+  newContact,
+  notifyMethod,
+  phone,
+  recordStatus,
+  searchQuery,
+  sortOrder,
+} from './common.js'
+import { OLD_COLUMN_LIMITS } from './limits.js'
 
 export const familySearchQuery = searchQuery
 
@@ -122,7 +134,7 @@ export const familyWriteResult = Type.Object(
 export const createFamilyBody = Type.Object(
   {
     name: Type.String({ minLength: 1, maxLength: 100 }),
-    householdPhone: Type.Optional(Type.String({ maxLength: 255 })),
+    householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
   },
   { additionalProperties: false },
 )
@@ -130,7 +142,7 @@ export const createFamilyBody = Type.Object(
 export const patchFamilyBody = Type.Object(
   {
     name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
-    householdPhone: Type.Optional(Type.String({ maxLength: 255 })),
+    householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
     status: Type.Optional(recordStatus),
   },
   { additionalProperties: false },
@@ -162,9 +174,13 @@ export const patchMemberBody = Type.Object(
     relationship: Type.Optional(Type.String({ minLength: 1, maxLength: 32 })),
     isPrimary: Type.Optional(Type.Boolean()),
     sortOrder: Type.Optional(sortOrder),
+    allowEmptyParents: Type.Optional(emptyParentsOption),
   },
   { additionalProperties: false },
 )
+
+/** DELETE /families/:id/members/:memberId: an optional { allowEmptyParents }. */
+export const deleteMemberBody = emptyParentsBody
 
 export type CreateFamilyBody = Type.Static<typeof createFamilyBody>
 export type PatchFamilyBody = Type.Static<typeof patchFamilyBody>

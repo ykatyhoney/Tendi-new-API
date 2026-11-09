@@ -7,16 +7,37 @@ export function digitsOf(value: string): string {
   return value.replace(EXTENSION, '').replace(/\D/g, '')
 }
 
+/** The value family_contact_phones.phone_normalized holds for this phone: the last ten digits, or ''. */
+export function normalizedPhone(value: string): string {
+  const digits = digitsOf(value)
+  return digits.length >= 10 ? digits.slice(-10) : ''
+}
+
 /**
- * Search key for a phone query. Seven or more digits become the last ten.
- * Shorter queries are names, not phones.
+ * How a search query is matched against phones. phone_normalized is '' or exactly ten digits, so:
+ * - ten or more digits: the last ten, an exact match (uses idx_fcp_norm);
+ * - seven to nine digits: a suffix of the normalized phone;
+ * - fewer than seven: not a phone search (the query is a name).
  */
-export function phoneSearchKey(query: string): string | null {
+export interface PhoneSearch {
+  kind: 'exact' | 'suffix'
+  digits: string
+}
+
+export function phoneSearch(query: string): PhoneSearch | null {
   const digits = digitsOf(query)
-  if (digits.length < 7) {
-    return null
+  if (digits.length >= 10) {
+    return { kind: 'exact', digits: digits.slice(-10) }
   }
-  return digits.slice(-10)
+  if (digits.length >= 7) {
+    return { kind: 'suffix', digits }
+  }
+  return null
+}
+
+/** The placeholder value for a phone search: the digits, or a LIKE suffix pattern. Digits need no escaping. */
+export function phoneSearchParam(search: PhoneSearch): string {
+  return search.kind === 'exact' ? search.digits : `%${search.digits}`
 }
 
 /**

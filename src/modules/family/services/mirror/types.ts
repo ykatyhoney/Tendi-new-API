@@ -79,8 +79,9 @@ export interface LegacyValues {
   parent_email: string
   use_father_phone_for_notification: 0 | 1
   use_mother_phone_for_notification: 0 | 1
-  notification_father_phone_method: NotifyMethod
-  notification_mother_phone_method: NotifyMethod
+  /** NULL (or any other stored value) is read as stored, so it differs from the derived method and is rewritten. */
+  notification_father_phone_method: NotifyMethod | null
+  notification_mother_phone_method: NotifyMethod | null
   father_fname: string
   father_lname: string
   father_email: string

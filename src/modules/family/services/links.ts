@@ -9,6 +9,7 @@ import { legacyColumnLengths } from './mirror/lengths.js'
 import { loadStoredChild, loadTargetFamily } from './mirror/load.js'
 import { affectedChildIdsForFamily } from './mirror/affected.js'
 import { writeMirror } from './mirror/write.js'
+import { noParentSlot, parentSlotCount } from './write/household.js'
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from './mirror/types.js'
 
 const CHILD_COLUMNS = new Set<string>(CHILDREN_MIRROR_COLUMNS)
@@ -67,7 +68,13 @@ export async function previewLink(pool: Pool, familyId: number, childId: number)
   }
 }
 
-export async function linkChild(pool: Pool, staffId: number, familyId: number, childId: number): Promise<LinkResult> {
+export async function linkChild(
+  pool: Pool,
+  staffId: number,
+  familyId: number,
+  childId: number,
+  options: { allowEmptyParents?: boolean } = {},
+): Promise<LinkResult> {
   const affected = await withStaffTransaction(pool, staffId, async (connection) => {
     const child = await lockChildForLink(connection, familyId, childId)
     const members = await activeMemberIds(connection, familyId)
@@ -76,6 +83,10 @@ export async function linkChild(pool: Pool, staffId: number, familyId: number, c
     }
     if (child.familyId !== null && child.familyId !== familyId) {
       throw new ApiError(409, 'ALREADY_LINKED', 'This child is linked to another family.', { familyId: child.familyId })
+    }
+    // A relink to the same family changes nothing, so only a new link is refused.
+    if (child.familyId !== familyId && options.allowEmptyParents !== true && (await parentSlotCount(connection, familyId)) === 0) {
+      throw noParentSlot([childId])
     }
     await connection.query('SET @family_mirror = 1')
     if (child.familyId !== familyId) {

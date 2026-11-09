@@ -17,7 +17,7 @@ export async function searchContacts(db: Sql, query: FamilySearchQuery): Promise
   const contactIds = page.contacts.map((contact) => asNumber(contact.id))
   const [phones, households] = await Promise.all([
     listPhones(db, contactIds),
-    listHouseholds(db, contactIds),
+    listHouseholds(db, contactIds, { activeOnly: true }),
   ])
   const phonesByContact = groupBy(phones, (row) => asNumber(row.contactId))
   const householdsByContact = groupBy(households, (row) => asNumber(row.contactId))

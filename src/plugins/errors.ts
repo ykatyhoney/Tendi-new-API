@@ -2,7 +2,7 @@ import type { FastifyError, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import sensible from '@fastify/sensible'
 import { ApiError, errorBody, statusText } from '../lib/api-error.js'
-import { mapDatabaseError } from '../lib/db-errors.js'
+import { mapDatabaseError, RETRY_AFTER_SECONDS } from '../lib/db-errors.js'
 import { validationDetails } from '../lib/validator.js'
 import type { ErrorObject } from 'ajv'
 
@@ -21,6 +21,9 @@ const errorsPlugin: FastifyPluginAsync = async (app) => {
     }
 
     if (error instanceof ApiError) {
+      if (error.code === 'RETRY') {
+        reply.header('Retry-After', String(RETRY_AFTER_SECONDS))
+      }
       return reply
         .status(error.statusCode)
         .send(errorBody(error.statusCode, error.code, error.message, error.details))
@@ -29,6 +32,9 @@ const errorsPlugin: FastifyPluginAsync = async (app) => {
     const databaseError = mapDatabaseError(error)
     if (databaseError !== null) {
       request.log.warn({ err: error, requestId: request.id }, 'database constraint rejected the write')
+      if (databaseError.code === 'RETRY') {
+        reply.header('Retry-After', String(RETRY_AFTER_SECONDS))
+      }
       return reply.status(databaseError.statusCode).send(databaseError)
     }
 

@@ -1,5 +1,8 @@
 import { Type } from '@fastify/type-provider-typebox'
-import { notifyMethod } from './common.js'
+import { emptyParentsBody, notifyMethod } from './common.js'
+
+/** POST .../link: an optional { allowEmptyParents }. */
+export const linkBody = emptyParentsBody
 
 export const familyChildParams = Type.Object({
   id: Type.Integer({ minimum: 1 }),

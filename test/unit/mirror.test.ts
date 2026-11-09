@@ -111,6 +111,23 @@ describe('deriveLegacyValues', () => {
     expect(deriveLegacyValues(child, family([other, main])).parent_email).toBe('main@example.invalid')
   })
 
+  it('F17 falls back to the main contact when the payer has no primary email', () => {
+    const payer = mother({ id: 2, payment: true, isPrimary: false, emails: [] })
+    const main = father({
+      id: 1,
+      isPrimary: true,
+      emails: [{ id: 1, email: 'main17@example.invalid', isPrimary: true, sortOrder: 0 }],
+    })
+    expect(deriveLegacyValues(child, family([payer, main])).parent_email).toBe('main17@example.invalid')
+    const payerWithEmail = mother({
+      id: 2,
+      payment: true,
+      isPrimary: false,
+      emails: [{ id: 2, email: 'payer17@example.invalid', isPrimary: true, sortOrder: 0 }],
+    })
+    expect(deriveLegacyValues(child, family([payerWithEmail, main])).parent_email).toBe('payer17@example.invalid')
+  })
+
   it('uses the household of the family being derived when a contact is in two households', () => {
     const shared = father({
       phones: [mobile('2125550102', { isPrimary: true })],

@@ -492,9 +492,11 @@ describe('family writes', () => {
       headers: auth,
       payload: { phones: [{ phone: '1'.repeat(31), type: 'home', isPrimary: true }] },
     })
-    expect(tooLong.statusCode).toBe(409)
-    expect(tooLong.json().code).toBe('VALUE_TOO_LONG')
-    expect(['father_home_phone', 'mother_home_phone']).toContain(tooLong.json().details.column)
+    // F3: a phone longer than the 30-character *_home_phone / *_office_phone columns is refused by the schema
+    // before the save starts (it used to reach the mirror and roll back with 409 VALUE_TOO_LONG).
+    expect(tooLong.statusCode).toBe(400)
+    expect(tooLong.json().code).toBe('VALIDATION')
+    expect(tooLong.json().details.map((detail: { path: string }) => detail.path)).toContain('/phones/0/phone')
     expect(await phoneRows(sample.contactId)).toEqual(beforePhones)
     expect(await childPhones(sample.familyId)).toEqual(beforeChildren)
 

@@ -155,7 +155,8 @@ function addressOf(contact: MirrorContact, type: AddressType): string {
   return address === undefined ? '' : joinAddress(address)
 }
 
-function joinAddress(address: MirrorAddress): string {
+/** The old address text: line1, line2, city, "state zip", with empty parts left out. */
+export function joinAddress(address: Pick<MirrorAddress, 'line1' | 'line2' | 'city' | 'state' | 'zip'>): string {
   const stateZip = [address.state, address.zip].map((part) => part.trim()).filter((part) => part.length > 0).join(' ')
   return [address.line1, address.line2, address.city, stateZip]
     .map((part) => part.trim())
@@ -163,13 +164,15 @@ function joinAddress(address: MirrorAddress): string {
     .join(', ')
 }
 
+/** The payer's primary email. If the payer has none, or there is no payer, the main contact's primary email. */
 function paymentEmail(family: MirrorFamily): string {
   const active = family.members.filter((member) => member.status === 'active')
   const payers = active.filter((member) => member.rights?.isPaymentResponsible === true)
   payers.sort(byMemberOrder)
-  if (payers.length > 0) {
-    const payer = payers[0]
-    return payer === undefined ? '' : primaryEmail(payer.contact)
+  const payer = payers[0]
+  const payerEmail = payer === undefined ? '' : primaryEmail(payer.contact)
+  if (payerEmail !== '') {
+    return payerEmail
   }
   const mains = active.filter((member) => member.isPrimary)
   mains.sort(byMemberOrder)

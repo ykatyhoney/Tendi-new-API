@@ -142,10 +142,11 @@ export function parseRedisUrl(value: string): string | null {
   return trimmed
 }
 
+/** Staff type lists. admin.type is compared lowercased and trimmed too (see plugins/auth.ts). */
 function requireList(name: string, value: string): string[] {
   const items = value
     .split(',')
-    .map((item) => item.trim())
+    .map((item) => item.trim().toLowerCase())
     .filter((item) => item.length > 0)
   if (items.length === 0) {
     throw new Error(`${name} must list at least one value`)

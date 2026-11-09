@@ -39,6 +39,19 @@ export function mapDatabaseError(error: unknown): ApiErrorBody | null {
   if (errno === 1452 && constraint === 'fk_fm_relationship') {
     return errorBody(400, 'UNKNOWN_RELATIONSHIP', 'The relationship is not in the list.', { constraint })
   }
+  if (errno === 1205 || errno === 1213) {
+    // 1213 reaches here only after withTransaction's one retry deadlocked again.
+    return errorBody(503, 'RETRY', 'The database was busy. Retry the request.')
+  }
+  if (errno === 1406) {
+    const column = columnName(error)
+    return errorBody(
+      409,
+      'VALUE_TOO_LONG',
+      column === undefined ? 'A value is too long for its column.' : `${column} is too long for its column.`,
+      column === undefined ? undefined : { column },
+    )
+  }
   if (errno === 1451) {
     return errorBody(409, 'IN_USE', 'This record is still in use.', {
       ...(constraint === undefined ? {} : { constraint }),
@@ -64,8 +77,10 @@ const INVALID_VALUE_ERRORS = new Map<number, string>([
   [1264, 'A number is out of range.'],
   [1265, 'A value does not fit its column.'],
   [1366, 'A value has characters or a format the column cannot store.'],
-  [1406, 'A value is too long.'],
 ])
+
+/** Seconds a client should wait before retrying a 503 RETRY. Sent as Retry-After. */
+export const RETRY_AFTER_SECONDS = 2
 
 /** `column 'name'` (1048, 1264, 1265, 1406) or `column \`db\`.\`table\`.\`name\`` (1366). */
 function columnName(error: DatabaseErrorLike): string | undefined {

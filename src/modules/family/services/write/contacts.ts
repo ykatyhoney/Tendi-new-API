@@ -1,5 +1,6 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../../lib/api-error.js'
+import { normalizedPhone } from '../../../../lib/phone.js'
 import { quoteIdentifier } from '../../../../lib/sql.js'
 import { withStaffTransaction } from '../../../../lib/with-transaction.js'
 import { placeholders, rows } from '../../repositories/query.js'
@@ -15,7 +16,15 @@ import { affectedChildIdsForContact } from '../mirror/affected.js'
 import { writeMirror } from '../mirror/write.js'
 import { auditValue, columnChanges, insertId, writeAudit, type AuditChange } from './audit.js'
 import { lockContactFamilies } from './families.js'
-import { assertOnePrimary, contactNames, legacyFullName, requireChange, typeLabelFor } from './rules.js'
+import {
+  assertJoinedAddressLengths,
+  assertNoDuplicates,
+  assertOnePrimary,
+  contactNames,
+  legacyFullName,
+  requireChange,
+  typeLabelFor,
+} from './rules.js'
 
 interface ContactRecord extends RowDataPacket {
   id: number
@@ -115,24 +124,41 @@ interface ListSpec {
   noun: string
   /** Every written column except id and family_contact_id. is_primary must be one of them. */
   columns: readonly string[]
+  /** The value an item without an id is matched on: two rows with the same key are the same phone, email or address. */
+  key?: (values: ListValues) => string
+}
+
+const text = (value: string | number | null | undefined): string => (value === null || value === undefined ? '' : String(value))
+
+/** phone_normalized, or the raw phone when that is empty (fewer than ten digits). */
+export function phoneKey(phone: string): string {
+  const normalized = normalizedPhone(phone)
+  return normalized === '' ? phone : normalized
+}
+
+export function emailKey(email: string): string {
+  return email.trim().toLowerCase()
 }
 
 const PHONES: ListSpec = {
   table: 'family_contact_phones',
   noun: 'phone',
   columns: ['phone', 'type', 'type_label', 'channel', 'is_primary', 'sort_order'],
+  key: (values) => phoneKey(text(values['phone'])),
 }
 
 const EMAILS: ListSpec = {
   table: 'family_contact_emails',
   noun: 'email',
   columns: ['email', 'type', 'type_label', 'is_primary', 'sort_order'],
+  key: (values) => emailKey(text(values['email'])),
 }
 
 const ADDRESSES: ListSpec = {
   table: 'family_contact_addresses',
   noun: 'address',
   columns: ['type', 'type_label', 'line1', 'line2', 'city', 'state', 'zip', 'is_primary'],
+  key: (values) => ['type', 'line1', 'line2', 'city', 'state', 'zip'].map((column) => text(values[column])).join('\u0000'),
 }
 
 export async function replacePhones(
@@ -141,6 +167,7 @@ export async function replacePhones(
   contactId: number,
   body: ReplacePhonesBody,
 ): Promise<ContactWriteResult> {
+  assertNoDuplicates('phones', 'phone', body.phones.map((phone) => phoneKey(phone.phone)))
   return replaceList(
     pool,
     staffId,
@@ -169,6 +196,7 @@ export async function replaceEmails(
   contactId: number,
   body: ReplaceEmailsBody,
 ): Promise<ContactWriteResult> {
+  assertNoDuplicates('emails', 'email', body.emails.map((email) => emailKey(email.email)))
   return replaceList(
     pool,
     staffId,
@@ -196,23 +224,33 @@ export async function replaceAddresses(
   contactId: number,
   body: ReplaceAddressesBody,
 ): Promise<ContactWriteResult> {
+  const addresses = body.addresses.map((address) => ({
+    ...address,
+    type: address.type ?? 'home',
+    line1: address.line1 ?? '',
+    line2: address.line2 ?? '',
+    city: address.city ?? '',
+    state: address.state ?? '',
+    zip: address.zip ?? '',
+  }))
+  assertJoinedAddressLengths(addresses)
   return replaceList(
     pool,
     staffId,
     contactId,
     ADDRESSES,
-    body.addresses.map((address) => {
-      const type = address.type ?? 'home'
+    addresses.map((address) => {
+      const type = address.type
       return {
         id: address.id,
         values: {
           type,
           type_label: typeLabelFor(type, address.typeLabel),
-          line1: address.line1 ?? '',
-          line2: address.line2 ?? '',
-          city: address.city ?? '',
-          state: address.state ?? '',
-          zip: address.zip ?? '',
+          line1: address.line1,
+          line2: address.line2,
+          city: address.city,
+          state: address.state,
+          zip: address.zip,
           is_primary: address.isPrimary === true ? 1 : 0,
         },
       }
@@ -222,8 +260,9 @@ export async function replaceAddresses(
 
 /**
  * Replaces a contact's phone, email, or address list and keeps row ids where it can.
- * An item with an id updates that row. An item without one keeps an identical existing row, or is inserted.
- * Rows that no item claims are deleted. Only changed columns are written and audited.
+ * An item with an id updates that row. An item without one is matched to a stored row by its value (the spec's
+ * key) and updates the columns that differ, or is inserted. Rows that no item claims are deleted. Only changed
+ * columns are written and audited.
  */
 async function replaceList(
   pool: Pool,
@@ -302,9 +341,12 @@ interface ListPlan {
   inserts: ListValues[]
 }
 
-/** Matches items to stored rows: by id first, then an identical unclaimed row. Exported for unit tests. */
+/**
+ * Matches items to stored rows: by id first, then an id-less item to an unclaimed row with the same value
+ * (an identical row first, else the lowest id). Exported for unit tests.
+ */
 export function planList(
-  spec: Pick<ListSpec, 'columns' | 'noun'>,
+  spec: Pick<ListSpec, 'columns' | 'noun' | 'key'>,
   stored: ReadonlyMap<number, ListValues>,
   items: readonly ListItem[],
 ): ListPlan {
@@ -324,17 +366,28 @@ export function planList(
     claimed.add(item.id)
     updates.push({ id: item.id, values: item.values })
   }
-  for (const item of items) {
-    if (item.id !== undefined) {
-      continue
-    }
-    const same = [...stored.entries()].find(
-      ([id, values]) => !claimed.has(id) && sameRow(spec.columns, values, item.values),
-    )
+  const idless = items.filter((item) => item.id === undefined)
+  const pending: ListItem[] = []
+  // Identical rows first, so a value match below never takes a row that another item is identical to.
+  for (const item of idless) {
+    const same = [...stored.entries()].find(([id, values]) => !claimed.has(id) && sameRow(spec.columns, values, item.values))
     if (same === undefined) {
-      unmatched.push(item.values)
+      pending.push(item)
     } else {
       claimed.add(same[0])
+    }
+  }
+  const key = spec.key
+  for (const item of pending) {
+    const byValue =
+      key === undefined
+        ? undefined
+        : [...stored.entries()].find(([id, values]) => !claimed.has(id) && key(values) === key(item.values))
+    if (byValue === undefined) {
+      unmatched.push(item.values)
+    } else {
+      claimed.add(byValue[0])
+      updates.push({ id: byValue[0], values: item.values })
     }
   }
   const deletes = [...stored.keys()].filter((id) => !claimed.has(id))
