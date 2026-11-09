@@ -96,7 +96,18 @@ Measured on this machine (`app.inject`, local MariaDB and Redis), database queri
 
 ## Test site on the VPS
 
-`https://global.mytendi.com:8443/docs` is Swagger UI for the API on `tendi_family_dev`, for checking status and responses from a laptop. pm2 runs `deploy/pm2.config.cjs` (`tendi-family-api`, Node 26 from `/opt/node-v26.13.0-linux-x64`, `NODE_ENV=development` so `/docs` is served, listening on 127.0.0.1:3100 only). nginx (`deploy/nginx-family-api-test.conf`) is the public side. It serves HTTPS on 8443 with the `global.mytendi.com` certificate, because Cloudflare fronts that name and forwards HTTPS on 8443. It also asks for a username and password. Signing in on `/docs` sets an HttpOnly gate cookie that `/api/` accepts, because Swagger's own `Authorization: Bearer` header leaves no room for the password. Without the cookie, `/api/` asks for the password and strips it before the API. Swagger's Authorize button takes a staff token from `npm run family:dev-token -- --admin <id>`. `db:dev:reset` deletes that token, and it also changes the data under the running site. After a code change, run `npm run build && pm2 restart tendi-family-api`.
+`https://global.mytendi.com:8443/docs` is Swagger UI for the API on `tendi_family_dev`, for checking status and responses from a laptop. pm2 runs `deploy/pm2.config.cjs` (`tendi-family-api`, Node 26 from `/opt/node-v26.13.0-linux-x64`, `NODE_ENV=development` so `/docs` is served, listening on 127.0.0.1:3100 only). nginx (`deploy/nginx-family-api-test.conf`) is the public side. It serves HTTPS on 8443 with the `global.mytendi.com` certificate, because Cloudflare fronts that name and forwards HTTPS on 8443. It also asks for a username and password. Signing in on `/docs` sets an HttpOnly gate cookie that `/api/` accepts, because Swagger's own `Authorization: Bearer` header leaves no room for the password. Without the cookie, `/api/` asks for the password and strips it before the API. Swagger's Authorize button takes a staff token from `npm run family:dev-token -- --admin <id>`. `db:dev:reset` deletes that token, and it also changes the data under the running site. `/docs` is kept white: the page opts out of browser-forced dark mode (`color-scheme: light only`, `darkreader-lock`) and uses a light stylesheet (`src/plugins/swagger-light-theme.ts`).
+
+`https://global.mytendi.com:8443/status` is a status page (`src/status`, pm2 `tendi-family-status`, 127.0.0.1:3101, same password). Every minute it calls every endpoint, and no call changes data:
+- **Reads** are real GETs.
+- **No-op writes** resend the current values of a dedicated household, "Status check (automated, do not use)". They run the whole write path and must report `affected_child_ids: []`. A run leaves `audit_logs`, `record_audit` and the family tables unchanged.
+- **Expected errors** are calls whose correct answer is a known 4xx. They are used where a real call would create or link something: a duplicate relationship code, a child linked to another family, an unknown member or child.
+
+The page shows each check's state and latency (degraded over 1 s), 90 days of uptime bars (UTC), and incidents. A check of the public URL expects nginx's 401. `test/unit/status.test.ts` fails when a documented route has no probe.
+
+The checker issues its own staff token (device `tendi-family-status`, so `family:dev-token -- --revoke` leaves it) into `results/status-token`, and issues a new one after a 401 (for example after `db:dev:reset`, which also makes it recreate its household). History is kept in `results/status-history.json`.
+
+After a code change, run `npm run build && pm2 restart tendi-family-api tendi-family-status`.
 
 ## Scripts
 

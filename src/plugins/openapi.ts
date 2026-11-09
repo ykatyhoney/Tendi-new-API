@@ -5,6 +5,7 @@ import swaggerUi from '@fastify/swagger-ui'
 import { apiErrorSchema } from '../lib/api-error.js'
 import { addValidatorSchemas } from '../lib/validator.js'
 import { registeredModels } from '../modules/family/schemas/index.js'
+import { LIGHT_ONLY_META, LIGHT_THEME_CSS } from './swagger-light-theme.js'
 
 const ERROR_REF = { $ref: 'ApiError#' }
 
@@ -46,9 +47,23 @@ const openapiPlugin: FastifyPluginAsync = async (app) => {
   })
 
   if (app.config.nodeEnv !== 'production') {
+    // Keep the page white when the browser forces dark mode (see swagger-light-theme.ts).
+    app.addHook('onSend', async (request, reply, payload) => {
+      const type = String(reply.getHeader('content-type') ?? '')
+      if (!request.url.startsWith('/docs') || !type.startsWith('text/html') || typeof payload !== 'string') {
+        return payload
+      }
+      return payload.replace('<meta charset="UTF-8">', `<meta charset="UTF-8">${LIGHT_ONLY_META}`)
+    })
     await app.register(swaggerUi, {
       routePrefix: '/docs',
+      theme: {
+        title: 'Tendi Family API',
+        css: [{ filename: 'light.css', content: LIGHT_THEME_CSS }],
+      },
       uiConfig: {
+        // Every highlight.js theme the plugin ships is dark; plain text keeps the code boxes white.
+        syntaxHighlight: false,
         // The default (1) folds every field of a model to [...], so types were hidden until clicked open.
         defaultModelExpandDepth: 3,
         // Show how long each Try it out request took.

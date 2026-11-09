@@ -30,5 +30,27 @@ module.exports = {
         TRUST_PROXY: '127.0.0.1',
       },
     },
+    {
+      // The status page (src/status): calls every endpoint every minute without changing data. nginx serves it at
+      // /status behind the same password. It issues its own staff token (device tendi-family-status) into
+      // results/status-token and keeps history in results/status-history.json.
+      name: 'tendi-family-status',
+      cwd: __dirname + '/..',
+      script: 'dist/status/server.js',
+      interpreter: NODE26,
+      exec_mode: 'fork',
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      env: {
+        DB_NAME: 'tendi_family_dev',
+        STATUS_PORT: '3101',
+        STATUS_BASE_PATH: '/status',
+        STATUS_API_URL: 'http://127.0.0.1:3100',
+        STATUS_PUBLIC_URL: 'https://global.mytendi.com:8443',
+        STATUS_INTERVAL_SECONDS: '60',
+      },
+    },
   ],
 }
