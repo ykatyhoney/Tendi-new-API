@@ -21,7 +21,7 @@ import {
   parentSlotCount,
   refuseEmptyParents,
 } from './household.js'
-import { contactNames, legacyFullName, requireChange } from './rules.js'
+import { contactNames, newLegacyFullName, requireChange } from './rules.js'
 
 interface FamilyRecord extends RowDataPacket {
   id: number
@@ -345,7 +345,8 @@ async function insertContact(
   const occupation = contact.occupation ?? ''
   const employer = contact.employer ?? ''
   const note = contact.note ?? null
-  const legacy = legacyFullName(fname, lname)
+  // The legacy format: the first name only, as the legacy app keeps father_name and mother_name.
+  const legacy = newLegacyFullName(fname, lname)
   const contactId = await insertId(
     connection,
     `INSERT INTO family_contacts

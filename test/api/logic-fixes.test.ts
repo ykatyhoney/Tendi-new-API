@@ -125,9 +125,9 @@ async function setEmail(contactId: number, email: string): Promise<void> {
 }
 
 /** An unlinked child, with its 28 values saved so afterAll can give them back. */
-async function unlinkedChild(): Promise<number> {
+async function unlinkedChild(condition = ''): Promise<number> {
   const [found] = await connection.query<RowDataPacket[]>(
-    `SELECT id FROM children WHERE family_id IS NULL AND status <> 'trash' ORDER BY id DESC LIMIT 50`,
+    `SELECT id FROM children WHERE family_id IS NULL AND status <> 'trash' ${condition} ORDER BY id DESC LIMIT 50`,
   )
   const id = found.map((row) => Number(row['id'])).find((candidate) => !snapshots.has(candidate))
   if (id === undefined) {
@@ -232,7 +232,7 @@ describe('logic fixes against MariaDB', () => {
     expect(response.json().code).toBe('HAS_LINKED_CHILDREN')
     expect(response.json().details).toEqual({ childIds: [childId] })
     expect((await memberRow(father.memberId))?.['status']).toBe('active')
-    expect(await childColumn(childId, 'father_name')).toBe('Fone Logicfix')
+    expect(await childColumn(childId, 'father_name')).toBe('Fone')
   })
 
   it('F2 refuses a link that leaves both parent slots empty, unless allowEmptyParents (409 NO_PARENT_SLOT)', async () => {
@@ -293,19 +293,25 @@ describe('logic fixes against MariaDB', () => {
     expect(await childColumn(childId, 'mother_name')).toBe('')
   })
 
-  it('F3 refuses fname + " " + lname over 100 characters with 400 on /fname and /lname', async () => {
+  it('F3 checks the length of the legacy_full_name actually stored (400 on /fname and /lname)', async () => {
     const familyId = await newFamily('LF F3 names')
+    // A new contact stores the first name only, so two 60-character names fit.
     const created = await app.inject({
       method: 'POST',
       url: `/api/v1/families/${familyId}/members`,
       headers: auth,
       payload: { relationship: TYPES.uncle, contact: { fname: 'ש'.repeat(60), lname: 'ל'.repeat(60) } },
     })
-    expect(created.statusCode, created.body).toBe(400)
-    expect(created.json().code).toBe('VALIDATION')
-    expect(created.json().details.map((detail: { path: string }) => detail.path).sort()).toEqual(['/fname', '/lname'])
+    expect(created.statusCode, created.body).toBe(200)
+    const hebrew = (created.json().family.members as { contact: { id: number; fname: string; legacyFullName: string } }[]).find(
+      (row) => row.contact.fname === 'ש'.repeat(60),
+    )
+    createdContacts.push(Number(hebrew?.contact.id))
+    expect(hebrew?.contact.legacyFullName).toBe('ש'.repeat(60))
 
+    // A contact stored in the "fname lname" format keeps it, so the joined names must fit 100 characters.
     const member = await addMember(familyId, TYPES.uncle, 'Nthree')
+    await connection.query(`UPDATE family_contacts SET legacy_full_name = 'Nthree Logicfix' WHERE id = ?`, [member.contactId])
     const patched = await app.inject({
       method: 'PATCH',
       url: `/api/v1/contacts/${member.contactId}`,
@@ -321,6 +327,7 @@ describe('logic fixes against MariaDB', () => {
       payload: { fname: 'a'.repeat(50), lname: 'b'.repeat(49) },
     })
     expect(fits.statusCode, fits.body).toBe(200)
+    expect(fits.json().contact.legacyFullName).toBe(`${'a'.repeat(50)} ${'b'.repeat(49)}`)
   })
 
   it('F3 refuses a joined address longer than its old column with 400 on the address fields', async () => {
@@ -803,6 +810,101 @@ describe('logic fixes against MariaDB', () => {
     expect(emails.statusCode, emails.body).toBe(400)
     expect(emails.json().code).toBe('DUPLICATE_ITEM')
     expect(emails.json().details.map((detail: { path: string }) => detail.path)).toEqual(['/emails/0/email', '/emails/1/email'])
+  })
+  it('F20 keeps legacy_full_name in the legacy first-name format: a last-name edit leaves father_name alone', async () => {
+    // A father from the dump: legacy_full_name holds his first name only, as the legacy app keeps father_name.
+    const [found] = await connection.query<RowDataPacket[]>(
+      `SELECT c.id AS childId, fc.id AS contactId, fc.fname, fc.lname
+       FROM children AS c
+       INNER JOIN family_members AS m ON m.family_id = c.family_id AND m.status = 'active' AND m.relationship = 'father'
+       INNER JOIN family_contacts AS fc ON fc.id = m.family_contact_id AND fc.status = 'active'
+       WHERE fc.lname <> '' AND fc.legacy_full_name = fc.fname AND c.father_name = fc.fname
+       ORDER BY c.id
+       LIMIT 1`,
+    )
+    const row = found[0]
+    if (row === undefined) {
+      throw new Error('no linked father in the first-name format')
+    }
+    const childId = Number(row['childId'])
+    const contactId = Number(row['contactId'])
+    const original = { fname: String(row['fname']), lname: String(row['lname']) }
+    const patch = (payload: Record<string, string>) =>
+      app.inject({ method: 'PATCH', url: `/api/v1/contacts/${contactId}`, headers: auth, payload })
+    try {
+      const lname = await patch({ lname: 'Lftwenty' })
+      expect(lname.statusCode, lname.body).toBe(200)
+      expect(lname.json().contact.legacyFullName).toBe(original.fname)
+      expect(await childColumn(childId, 'father_name')).toBe(original.fname)
+
+      const fname = await patch({ fname: 'Newfirst' })
+      expect(fname.statusCode, fname.body).toBe(200)
+      expect(fname.json().contact.legacyFullName).toBe('Newfirst')
+      expect(fname.json().affected_child_ids).toContain(childId)
+      expect(await childColumn(childId, 'father_name')).toBe('Newfirst')
+    } finally {
+      const restored = await patch(original)
+      expect(restored.statusCode, restored.body).toBe(200)
+    }
+    expect(await childColumn(childId, 'father_name')).toBe(original.fname)
+  })
+
+  it('F20 gives a new contact legacy_full_name = fname, and leaves a legacy_full_name in neither format alone', async () => {
+    const familyId = await newFamily('LF F20 new')
+    const father = await addMember(familyId, 'father', 'Ftwenty')
+    const childId = await unlinkedChild()
+    await linkOk(familyId, childId)
+    expect(await childColumn(childId, 'father_name')).toBe('Ftwenty')
+    const [stored] = await connection.query<RowDataPacket[]>(`SELECT legacy_full_name AS legacy FROM family_contacts WHERE id = ?`, [
+      father.contactId,
+    ])
+    expect(stored[0]?.['legacy']).toBe('Ftwenty')
+
+    await connection.query(`UPDATE family_contacts SET legacy_full_name = 'Reb Ftwenty' WHERE id = ?`, [father.contactId])
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/contacts/${father.contactId}`,
+      headers: auth,
+      payload: { fname: 'Gtwenty', lname: 'Other' },
+    })
+    expect(renamed.statusCode, renamed.body).toBe(200)
+    expect(renamed.json().contact.legacyFullName).toBe('Reb Ftwenty')
+    expect(await childColumn(childId, 'father_name')).toBe('Reb Ftwenty')
+  })
+
+  it('F21 preview after equals the row link stores, compared literally, in all 28 columns', async () => {
+    const familyId = await newFamily('LF F21')
+    await addMember(familyId, 'father', 'Ftwentyone')
+    await addMember(familyId, 'mother', 'Mtwentyone')
+    // A child whose old columns hold '' where the mirror's empty value is NULL (father_employer and others).
+    const childId = await unlinkedChild(
+      `AND id IN (SELECT child_id FROM children_additional_information WHERE father_employer = '')`,
+    )
+    const preview = await app.inject({
+      method: 'GET',
+      url: `/api/v1/families/${familyId}/children/${childId}/preview`,
+      headers: auth,
+    })
+    expect(preview.statusCode, preview.body).toBe(200)
+    const after = Object.fromEntries(
+      (preview.json().columns as { column: string; after: unknown }[]).map((row) => [row.column, row.after]),
+    )
+    await linkOk(familyId, childId)
+    const select = (columns: readonly string[]) =>
+      columns
+        .map((column) => (column.startsWith('use_') ? `${quoteIdentifier(column)} + 0` : quoteIdentifier(column)) + ` AS ${quoteIdentifier(column)}`)
+        .join(', ')
+    const [childRows] = await connection.query<RowDataPacket[]>(
+      `SELECT ${select(CHILDREN_MIRROR_COLUMNS)} FROM children WHERE id = ?`,
+      [childId],
+    )
+    const [additionalRows] = await connection.query<RowDataPacket[]>(
+      `SELECT ${select(ADDITIONAL_MIRROR_COLUMNS)} FROM children_additional_information WHERE child_id = ?`,
+      [childId],
+    )
+    const stored = { ...childRows[0], ...additionalRows[0] }
+    expect(Object.keys(after)).toHaveLength(28)
+    expect(after).toStrictEqual(stored)
   })
 })
 

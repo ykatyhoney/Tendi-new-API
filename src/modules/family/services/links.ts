@@ -4,7 +4,7 @@ import { withStaffTransaction } from '../../../lib/with-transaction.js'
 import { rows } from '../repositories/query.js'
 import type { LinkPreview, LinkResult, ReplaceRightsBody, RightsResult, UnlinkResult } from '../schemas/link.js'
 import { auditValue, columnChanges, insertId, lockFamilies, writeAudit, type AuditChange } from './write/audit.js'
-import { characterLength, deriveLegacyValues, legacyColumnValue, sameLegacyValue } from './mirror/derive.js'
+import { characterLength, deriveLegacyValues, legacyColumnValue, sameLegacyValue, valueAfterMirror } from './mirror/derive.js'
 import { legacyColumnLengths } from './mirror/lengths.js'
 import { loadStoredChild, loadTargetFamily } from './mirror/load.js'
 import { affectedChildIdsForFamily } from './mirror/affected.js'
@@ -49,15 +49,18 @@ export async function previewLink(pool: Pool, familyId: number, childId: number)
   const lengths = await legacyColumnLengths(pool)
   const columns = [...CHILDREN_MIRROR_COLUMNS, ...ADDITIONAL_MIRROR_COLUMNS].map((column) => {
     const today = legacyColumnValue(child.stored, column)
-    const next = legacyColumnValue(after, column)
+    const derived = legacyColumnValue(after, column)
+    const inChildren = CHILD_COLUMNS.has(column)
+    // Exactly what link will store: '' stays '' where the derived empty value is NULL, and the reverse.
+    const next = valueAfterMirror(today, derived, !inChildren && !child.hasAdditional)
     const max = lengths.get(column)
     return {
       column,
-      table: CHILD_COLUMNS.has(column) ? ('children' as const) : ('children_additional_information' as const),
+      table: inChildren ? ('children' as const) : ('children_additional_information' as const),
       today,
       after: next,
-      changed: !sameLegacyValue(today, next),
-      tooLong: typeof next === 'string' && max !== undefined && characterLength(next) > max,
+      changed: !sameLegacyValue(today, derived),
+      tooLong: typeof derived === 'string' && max !== undefined && characterLength(derived) > max,
     }
   })
   return {

@@ -166,7 +166,8 @@ describe('family writes', () => {
     })
     expect(added.statusCode).toBe(200)
     const father = added.json().family.members[0]
-    expect(father.contact.legacyFullName).toBe('B6 Father')
+    // A new contact stores the legacy format: the first name only.
+    expect(father.contact.legacyFullName).toBe('B6')
     expect(father.isPrimary).toBe(true)
     createdContacts.push(father.contact.id)
     const memberId = father.id
@@ -251,7 +252,7 @@ describe('family writes', () => {
     expect(missingMember.statusCode).toBe(404)
   })
 
-  it('replaces phones, emails, and addresses, and keeps legacy names until a name changes', async () => {
+  it('replaces phones, emails, and addresses, and keeps a legacy name that is in neither format', async () => {
     const created = await postFamily('B6 Channels')
     createdFamilies.push(created.family.id)
     const added = await app.inject({
@@ -282,7 +283,9 @@ describe('family writes', () => {
       payload: { fname: 'B6b' },
     })
     expect(renamed.statusCode).toBe(200)
-    expect(renamed.json().contact.legacyFullName).toBe('B6b Named')
+    // 'Kept Name' is neither the first name nor "fname lname", so a name change leaves it as it is.
+    expect(renamed.json().contact.fname).toBe('B6b')
+    expect(renamed.json().contact.legacyFullName).toBe('Kept Name')
 
     const twoPrimaries = await app.inject({
       method: 'PUT',

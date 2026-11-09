@@ -21,7 +21,7 @@ import {
   assertNoDuplicates,
   assertOnePrimary,
   contactNames,
-  legacyFullName,
+  nextLegacyFullName,
   requireChange,
   typeLabelFor,
 } from './rules.js'
@@ -62,7 +62,13 @@ export async function patchContact(
     const next = {
       fname,
       lname,
-      legacy_full_name: namesChanged ? legacyFullName(fname, lname) : current.legacyFullName,
+      // Kept in the format it is stored in (the legacy format is the first name only).
+      legacy_full_name: namesChanged
+        ? nextLegacyFullName(
+            { fname: current.fname, lname: current.lname, legacyFullName: current.legacyFullName },
+            { fname, lname },
+          )
+        : current.legacyFullName,
       hebrew_name: body.hebrewName ?? current.hebrewName,
       occupation: body.occupation ?? current.occupation,
       employer: body.employer ?? current.employer,

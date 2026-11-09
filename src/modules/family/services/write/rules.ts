@@ -7,8 +7,46 @@ function characterLength(value: string): number {
   return Array.from(value).length
 }
 
+/** "fname lname", without stray spaces. One of the two formats a stored legacy_full_name can be in. */
 export function legacyFullName(fname: string, lname: string): string {
   return [fname, lname].filter((part) => part.length > 0).join(' ')
+}
+
+/**
+ * The legacy format: the first name only, which is what the legacy app keeps in children.father_name and
+ * mother_name (all 732 contacts in the dev data). A contact with no first name gets the last name.
+ * A new contact is stored this way.
+ */
+export function newLegacyFullName(fname: string, lname: string): string {
+  return fname.length > 0 ? fname : lname
+}
+
+/**
+ * legacy_full_name after a name change, kept in the format it is stored in: the first name only follows the
+ * first name, "fname lname" follows both, and anything else is left as it is. The "fname lname" format must fit
+ * the 100-character legacy_full_name and children.father_name / mother_name columns (400 on /fname and /lname);
+ * the other two are already within the schema's 100-character name limit.
+ */
+export function nextLegacyFullName(
+  current: { fname: string; lname: string; legacyFullName: string },
+  next: { fname: string; lname: string },
+): string {
+  if (current.legacyFullName === newLegacyFullName(current.fname, current.lname)) {
+    return newLegacyFullName(next.fname, next.lname)
+  }
+  if (current.legacyFullName !== legacyFullName(current.fname, current.lname)) {
+    return current.legacyFullName
+  }
+  const joined = legacyFullName(next.fname, next.lname)
+  const max = OLD_COLUMN_LIMITS.fullName
+  if (characterLength(joined) > max) {
+    const message = `fname + " " + lname must be at most ${max} characters for this contact`
+    throw new ApiError(400, 'VALIDATION', `The full name is longer than ${max} characters.`, [
+      { path: '/fname', message },
+      { path: '/lname', message },
+    ])
+  }
+  return joined
 }
 
 export function typeLabelFor(type: string, label: string | null | undefined): string | null {
@@ -36,23 +74,12 @@ export function assertOnePrimary(itemCount: number, primaryCount: number): void 
   throw new ApiError(409, 'SECOND_PRIMARY', 'This list needs exactly one primary.')
 }
 
-/**
- * Trimmed names. A contact needs a first or a last name, and fname + ' ' + lname must fit the 100-character
- * legacy_full_name and children.father_name / mother_name columns.
- */
+/** Trimmed names. A contact needs a first or a last name. legacy_full_name is checked by nextLegacyFullName. */
 export function contactNames(fname: string, lname: string): { fname: string; lname: string } {
   const names = { fname: fname.trim(), lname: lname.trim() }
   if (names.fname.length === 0 && names.lname.length === 0) {
     throw new ApiError(400, 'VALIDATION', 'A contact needs a first or last name.', [
       { path: '/fname', message: 'must not be blank when lname is blank' },
-    ])
-  }
-  const max = OLD_COLUMN_LIMITS.fullName
-  if (characterLength(legacyFullName(names.fname, names.lname)) > max) {
-    const message = `fname + " " + lname must be at most ${max} characters`
-    throw new ApiError(400, 'VALIDATION', `The full name is longer than ${max} characters.`, [
-      { path: '/fname', message },
-      { path: '/lname', message },
     ])
   }
   return names

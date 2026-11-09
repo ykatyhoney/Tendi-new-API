@@ -6,7 +6,10 @@
  * test/db/column-limits.test.ts fails if a schema maxLength is longer than any column a field is written to.
  */
 export const OLD_COLUMN_LIMITS = {
-  /** fname + ' ' + lname: children.father_name / mother_name and family_contacts.legacy_full_name, varchar(100). */
+  /**
+   * legacy_full_name in the "fname lname" format: children.father_name / mother_name and
+   * family_contacts.legacy_full_name, varchar(100). Checked by nextLegacyFullName when that format is kept.
+   */
   fullName: 100,
   /** children_additional_information.father_fname, father_lname, mother_fname, mother_lname: varchar(100). */
   name: 100,

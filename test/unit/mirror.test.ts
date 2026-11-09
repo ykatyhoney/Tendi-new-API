@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../../src/lib/api-error.js'
-import { assertLegacyLengths, deriveLegacyValues } from '../../src/modules/family/services/mirror/derive.js'
+import { assertLegacyLengths, deriveLegacyValues, valueAfterMirror } from '../../src/modules/family/services/mirror/derive.js'
 import type {
   MirrorContact,
   MirrorFamily,
@@ -306,3 +306,17 @@ function work(phone: string, extra: Partial<MirrorPhone> = {}): MirrorPhone {
 function other(label: string, phone: string): MirrorPhone {
   return { id: 4, phone, type: 'other', typeLabel: label, isPrimary: false, sortOrder: 0 }
 }
+
+describe('valueAfterMirror', () => {
+  it('keeps the stored value when it equals the derived one, so a stored empty string stays empty', () => {
+    expect(valueAfterMirror('', null)).toBe('')
+    expect(valueAfterMirror(null, '')).toBeNull()
+    expect(valueAfterMirror('voice', 'voice')).toBe('voice')
+    expect(valueAfterMirror(null, 'voice')).toBe('voice')
+    expect(valueAfterMirror('Old', 'New')).toBe('New')
+  })
+
+  it('gives the derived value when the row is inserted', () => {
+    expect(valueAfterMirror('', null, true)).toBeNull()
+  })
+})

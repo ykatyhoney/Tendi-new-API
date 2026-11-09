@@ -77,6 +77,20 @@ export function sameLegacyValue(stored: string | number | null, derived: string 
   return String(stored) === String(derived)
 }
 
+/**
+ * The value a column holds after the mirror runs: the stored value when it already equals the derived one
+ * (writeMirror writes only changed columns, so a stored '' stays '' where the derived value is NULL), else the
+ * derived value. A child with no children_additional_information row gets that row inserted with the derived
+ * values, so pass insertsRow for its columns. The link preview's "after" uses this.
+ */
+export function valueAfterMirror(
+  stored: string | number | null,
+  derived: string | number | null,
+  insertsRow = false,
+): string | number | null {
+  return !insertsRow && sameLegacyValue(stored, derived) ? stored : derived
+}
+
 export function legacyColumnValue(values: LegacyValues, column: LegacyColumn): string | number | null {
   return values[column]
 }
