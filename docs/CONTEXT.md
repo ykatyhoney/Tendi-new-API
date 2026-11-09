@@ -18,15 +18,23 @@ npm run db:test:reset
 npm run db:verify-schema
 ```
 
-`db:dev:reset` and `db:test:reset` drop and recreate `tendi_family_dev` or `tendi_family_test` (`utf8mb4` / `utf8mb4_general_ci`), import `db/tendi-family-dev-db-2026-11-06.sql`, and grant `family_api` on every local family database that exists. They refuse any host other than `127.0.0.1` or `localhost`, and any database name other than those two.
+`db:dev:reset` and `db:test:reset` drop and recreate `tendi_family_dev` or `tendi_family_test` (`utf8mb4` / `utf8mb4_general_ci`), import `db/tendi-family-dev-db-2026-11-09.sql` (revision 4: 375 families, 624 linked children, an empty lock log), and grant `family_api` on every local family database that exists. They refuse any host other than `127.0.0.1` or `localhost`, and any database name other than those two.
 
-`db/tendi_family_module.sql` is the 2026-09-24 dump with family revision 3 applied. It has no `CREATE USER`. `db:verify-schema` imports it into `tendi_family_schema_ref` and compares columns, generated columns, indexes, foreign keys and their rules, check constraints, and the two lock triggers. The account grants follow the design's section 6 table: full access to the seven family tables, no delete on `relationship_types`, update only `children.family_id` and the 28 parent columns, insert on `children_additional_information`, read on `classes`, `branches`, and `admin_api_tokens`, six columns of `admin` (not `password`), and insert on `audit_logs`. Staff auth also updates `admin_api_tokens.last_seen_at`, so the account has `UPDATE` on that column and nothing else on the table. The account is created for both `localhost` and `127.0.0.1` because the pool connects to `DB_HOST`.
+`db/tendi_family_module.sql` is the Family module script itself, revision 4 of 9 November 2026: the family tables, `children.family_id`, the three lock triggers, the `family_api` account (section 6, commented out) and a rollback (section 7). It alters `children` and `children_additional_information`, so it can't be imported on its own. `db/raul-tendi-db-2026-09-24_family.sql` is the 2026-09-24 dump with that script applied and no child linked. It has no `CREATE USER`. `db:verify-schema` checks that the module script says revision 4, imports the `raul-…_family.sql` dump into `tendi_family_schema_ref`, and compares columns, generated columns, indexes, foreign keys and their rules, check constraints, and the three lock triggers (`trg_children_family_bu`, `trg_children_family_bi`, `trg_cai_family_bu`). It also fails if any of the three is missing. The account grants follow the design's section 6 table: full access to the seven family tables, no delete on `relationship_types`, update only `children.family_id` and the 28 parent columns, insert on `children_additional_information`, read on `classes`, `branches`, and `admin_api_tokens`, six columns of `admin` (not `password`), and insert on `audit_logs`. Staff auth also updates `admin_api_tokens.last_seen_at`, so the account has `UPDATE` on that column and nothing else on the table. The account is created for both `localhost` and `127.0.0.1` because the pool connects to `DB_HOST`.
 
 The pool is one mysql2 promise pool: `utf8mb4`, `dateStrings: true`, `timezone: 'Z'`, `supportBigNumbers`, named placeholders, and `bit(1)` values as numbers. `withTransaction()` runs at READ COMMITTED, commits or rolls back, clears `@family_mirror` and `@audit_user` before releasing the connection, and retries once on error 1213. If those variables cannot be cleared, the connection is destroyed instead of going back to the pool. `withStaffTransaction()` also sets `@audit_user`; every route write uses it. Two saves of the same family take its row lock, so they commit one after the other. A test sends both with `Promise.all` and both return 200.
 
 READ COMMITTED is required, not a tuning choice. At MariaDB's default REPEATABLE READ, a save that does a plain `SELECT` and then waits on a family lock keeps reading the rows as they were before the wait, so it derives the 28 columns from data another save has already changed. A contact save waiting behind a member save wrote the old father's new mobile into `father_phone` this way. `test/api/hardening.test.ts` repeats that interleaving and fails if the isolation level is removed. A contact save also re-reads the contact's households after each lock and locks any it has not, so a household that gains the contact during the wait is included.
 
-The lock triggers `trg_children_family_bu` and `trg_cai_family_bu` put a linked child's 28 parent columns back unless the statement runs as `family_api` with `@family_mirror = 1`. `family_id` itself is not one of those columns. `writeMirror` sets the flag for the statement and clears it before the connection returns to the pool. Unlink sets `family_id` to NULL and does not rewrite the 28 columns.
+The three lock triggers put a write back and log it in `family_mirror_lock_log` unless the statement runs as `family_api` with `@family_mirror = 1` on the same connection. The flag from any other account, root included, does not open the lock.
+
+- `trg_children_family_bu` and `trg_cai_family_bu` put a linked child's 28 parent columns back.
+- Since revision 4, `trg_children_family_bu` also locks `children.family_id` for every child, linked or not: a link, a relink (moving a child to another family) or an unlink is put back and logged with `col_name = 'family_id'`. Before revision 4, clearing `family_id`, writing a parent column and setting `family_id` back got past the lock (LOGIC-ISSUES I1).
+- `trg_children_family_bi` (revision 4) changes an `INSERT INTO children` with `family_id` set to NULL and logs it (with `child_id` 0, because the id isn't assigned yet), so a new child can't arrive linked.
+
+`writeMirror` sets the flag for the statement and clears it before the connection returns to the pool. Link and unlink set it on the transaction's connection before they change `family_id`, and `withTransaction()` clears it afterwards. Unlink sets `family_id` to NULL and does not rewrite the 28 columns. `family_api` has no `INSERT` on `children`, so the insert trigger never applies to the API.
+
+**Emergency unlink (`@family_unlink`).** From any account, root included, `SET @family_unlink = 1; UPDATE children SET family_id = NULL WHERE id = <child id>; SET @family_unlink = NULL;` unlinks one child without the API. It is not put back and not logged. The flag only allows NULL: with it set, a link or relink is still put back and logged. Always reset it to NULL in the same session. In tests, fixtures that link or relink go through `asFamilyApi()` and fixtures that put a borrowed child back to unlinked use `unlinkWithFlag()` (both in `test/helpers/lock.ts`). `test/db/lock-revision-4.test.ts` covers the lock.
 
 ## How to start
 
@@ -42,11 +50,11 @@ npm run dev
 
 | Database | Source | Used by |
 | --- | --- | --- |
-| `tendi_family_dev` | `db/tendi-family-dev-db-2026-11-06.sql` | `npm run dev`, manual checks |
+| `tendi_family_dev` | `db/tendi-family-dev-db-2026-11-09.sql` | `npm run dev`, manual checks |
 | `tendi_family_test` | the same dump, reset before a test run | `npm test` |
-| `tendi_family_schema_ref` | `db/tendi_family_module.sql` | `npm run db:verify-schema` |
+| `tendi_family_schema_ref` | `db/raul-tendi-db-2026-09-24_family.sql` (the 2026-09-24 dump plus `db/tendi_family_module.sql`) | `npm run db:verify-schema` |
 
-`db/tendi_family_dev_seed.sql` is the family rows as inserts, for use after a base dump plus the module schema. The November 6 dump already includes those rows. `db/family_backfill_report.csv` lists the expected differences for the unlinked children and is used when link is built.
+`db/tendi_family_dev_seed.sql` is the family rows as inserts, for use after a base dump plus the module schema. Its link part sets `@family_mirror = 1` itself, so run it as `family_api`: from any other account revision 4 puts the 624 links back and logs them. The November 9 dump already includes those rows. `db/family_backfill_report.csv` lists the expected differences for the unlinked children and is used when link is built.
 
 ## What a save will do
 

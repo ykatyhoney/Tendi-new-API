@@ -1,6 +1,7 @@
--- Family module dev data: run AFTER the 2026-09-24 dump and tendi_family_module.sql (revision 3).
+-- Family module dev data: run AFTER the 2026-09-24 dump and tendi_family_module.sql (revision 4).
 -- Families, contacts, phones, emails, addresses, members and per-child rights drafted from the legacy
--- parent data, then 624 children linked. Run the link part as family_api; it changes no legacy value.
+-- parent data, then 624 children linked. Run the link part as family_api: from any other account (root
+-- included) revision 4 puts the links back and logs them. It changes no legacy value.
 -- Local development only.
 
 START TRANSACTION;

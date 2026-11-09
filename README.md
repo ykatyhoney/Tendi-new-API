@@ -14,7 +14,7 @@ npm run dev            # http://127.0.0.1:3000, OpenAPI viewer at /docs
 | --- | --- |
 | `npm run test:unit` | Unit tests. No database needed. |
 | `npm test` | Resets `tendi_family_test`, then runs every suite. |
-| `npm run db:verify-schema` | Compares both local databases with `db/tendi_family_module.sql`. |
+| `npm run db:verify-schema` | Compares both local databases with the revision 4 schema (`db/raul-tendi-db-2026-09-24_family.sql`: the 2026-09-24 dump plus `db/tendi_family_module.sql`), including the three lock triggers. |
 | `npm run family:reconcile` | Compares every linked child's 28 old columns with the derived values. |
 | `npm run export:openapi` | Writes `openapi/family.json`. A unit test fails when it is out of date. |
 

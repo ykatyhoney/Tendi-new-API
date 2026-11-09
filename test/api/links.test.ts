@@ -11,6 +11,7 @@ import { sameLegacyValue } from '../../src/modules/family/services/mirror/derive
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from '../../src/modules/family/services/mirror/types.js'
 import { issueDevToken, revokeDevTokens } from '../../scripts/dev-token.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
+import { unlinkWithFlag } from '../helpers/lock.js'
 
 const TEST_DATABASE = 'tendi_family_test'
 const MIRROR_COLUMNS = [...CHILDREN_MIRROR_COLUMNS, ...ADDITIONAL_MIRROR_COLUMNS]
@@ -485,7 +486,8 @@ async function snapshotChild(childId: number): Promise<ColumnSnapshot> {
 }
 
 async function restoreChild(child: ColumnSnapshot): Promise<void> {
-  await connection.query(`UPDATE children SET family_id = NULL WHERE id = ?`, [child.id])
+  // The backfill child starts unlinked. Root may only clear family_id with @family_unlink = 1 (revision 4).
+  await unlinkWithFlag(connection, child.id)
   await connection.query(
     `UPDATE children SET ${assignments(CHILDREN_MIRROR_COLUMNS)} WHERE id = ?`,
     [...values(CHILDREN_MIRROR_COLUMNS, child.children), child.id],
