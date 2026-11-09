@@ -19,6 +19,8 @@ B0 scaffolded this repository. There was no existing Family API to upgrade: no `
 
 **This machine is on Node.js 24.12.0.** `npm install` warns `EBADENGINE` because `engines` requires Node 26. Typecheck, lint, and tests were run on Node 24. Install Node 26 before treating the runtime as the one the API ships on. No Node 26 binary was installed onto the machine.
 
+**Update, 9 November 2026:** Node 26.13.0 (LTS) is installed with nvm-windows. Typecheck, lint, all tests, `family:reconcile`, `build`, and the compiled server pass on it. 24.12.0 stays the active nvm version until `nvm use 26.13.0`.
+
 ## What's left
 
 - B1: import the dump into `tendi_family_dev` and `tendi_family_test`, create `family_api`, add the pool and `withTransaction`, and verify the schema. Blocked on `tendi_family_module.sql` for the grants and the schema comparison.

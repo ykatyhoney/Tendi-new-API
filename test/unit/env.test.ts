@@ -71,6 +71,18 @@ describe('loadConfig', () => {
     ).rejects.toThrow(/CORS_ORIGIN must list/)
   })
 
+  it('defaults to 300 a minute in process memory, and accepts only a redis URL for a shared store', async () => {
+    expect((await loadConfig({ ...isolated, data: {} })).rateLimit).toEqual({ perMinute: 300, redisUrl: null })
+    const shared = await loadConfig({
+      ...isolated,
+      data: { RATE_LIMIT_PER_MINUTE: '120', RATE_LIMIT_REDIS_URL: ' rediss://cache.internal:6380/0 ' },
+    })
+    expect(shared.rateLimit).toEqual({ perMinute: 120, redisUrl: 'rediss://cache.internal:6380/0' })
+    await expect(
+      loadConfig({ ...isolated, data: { RATE_LIMIT_REDIS_URL: 'cache.internal:6379' } }),
+    ).rejects.toThrow(/RATE_LIMIT_REDIS_URL must be a redis/)
+  })
+
   it('reads TRUST_PROXY as off, on, a hop count, or a list of proxies', async () => {
     const read = async (value: string) =>
       (await loadConfig({ ...isolated, data: { TRUST_PROXY: value } })).trustProxy

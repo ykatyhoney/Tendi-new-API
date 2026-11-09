@@ -37,6 +37,10 @@ export const envSchema = Type.Object({
   LOG_LEVEL: logLevelSchema,
   /** Empty or false: use the socket address. true, a hop count, or comma-separated proxy addresses. */
   TRUST_PROXY: Type.String({ default: '' }),
+  /** Requests a minute, counted per IP and per token. */
+  RATE_LIMIT_PER_MINUTE: Type.Integer({ minimum: 1, maximum: 100000, default: 300 }),
+  /** redis:// or rediss:// URL. Empty keeps the counters in this process. Set it when more than one instance runs. */
+  RATE_LIMIT_REDIS_URL: Type.String({ default: '' }),
 })
 
 export type RawEnv = Type.Static<typeof envSchema>
@@ -61,6 +65,11 @@ export interface AppConfig {
   relationshipAdminTypes: readonly string[]
   /** Passed to Fastify's trustProxy, so request.ip (and the per-IP rate limit) sees the client behind a proxy. */
   trustProxy: boolean | number | string[]
+  rateLimit: {
+    perMinute: number
+    /** null keeps the counters in process memory. */
+    redisUrl: string | null
+  }
 }
 
 export interface LoadConfigOptions {
@@ -119,6 +128,17 @@ export function parseTrustProxy(value: string): boolean | number | string[] {
   return splitList(trimmed)
 }
 
+export function parseRedisUrl(value: string): string | null {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return null
+  }
+  if (!/^rediss?:\/\/\S+$/i.test(trimmed)) {
+    throw new Error('RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL.')
+  }
+  return trimmed
+}
+
 function requireList(name: string, value: string): string[] {
   const items = value
     .split(',')
@@ -155,6 +175,10 @@ export function toAppConfig(env: RawEnv): AppConfig {
     allowedStaffTypes: requireList('ALLOWED_STAFF_TYPES', env.ALLOWED_STAFF_TYPES),
     relationshipAdminTypes: requireList('RELATIONSHIP_ADMIN_TYPES', env.RELATIONSHIP_ADMIN_TYPES),
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
+    rateLimit: {
+      perMinute: env.RATE_LIMIT_PER_MINUTE,
+      redisUrl: parseRedisUrl(env.RATE_LIMIT_REDIS_URL),
+    },
   }
 }
 
