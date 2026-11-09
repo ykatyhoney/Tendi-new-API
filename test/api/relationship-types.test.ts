@@ -3,6 +3,7 @@ import mysql from 'mysql2/promise'
 import { afterAll, describe, expect, it } from 'vitest'
 import { buildApp } from '../../src/app.js'
 import { loadConfig } from '../../src/config/env.js'
+import { RELATIONSHIP_TYPES_CACHE_KEY } from '../../src/modules/family/services/relationship-types.js'
 import { issueDevToken, revokeDevTokens } from '../../scripts/dev-token.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
 
@@ -45,6 +46,8 @@ describe('relationship types', () => {
 
   afterAll(async () => {
     await deleteCreated()
+    // The rows above were removed with SQL, behind the API, so drop the cached dropdown too.
+    await app.cache.del(RELATIONSHIP_TYPES_CACHE_KEY)
     await revokeDevTokens(connection, adminId)
     await revokeDevTokens(connection, officeId)
     await connection.end()

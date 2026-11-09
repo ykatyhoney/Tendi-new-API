@@ -42,6 +42,13 @@ export function loadAdminConfig(): AdminConfig {
   return { host, port, user, password, familyPassword, clientPath }
 }
 
+/** REDIS_URL from the environment or .env, or null. The reset scripts clear a database's cache with it. */
+export function loadRedisUrl(): string | null {
+  const file = readDotEnv('.env')
+  const url = (process.env['REDIS_URL'] ?? file['REDIS_URL'] ?? '').trim()
+  return url.length === 0 ? null : url
+}
+
 export function loadDatabaseName(): string {
   const file = readDotEnv('.env')
   const name = process.env['DB_NAME'] || file['DB_NAME'] || ''

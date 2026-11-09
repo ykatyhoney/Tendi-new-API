@@ -43,9 +43,9 @@ describe('rate limits', () => {
     fake.state.failing = false
   })
 
-  async function open(rateLimit: AppConfig['rateLimit']): Promise<App> {
+  async function open({ perMinute, redisUrl }: { perMinute: number; redisUrl: AppConfig['redisUrl'] }): Promise<App> {
     const config = await loadConfig({ dotenv: false, env: false, data: {} })
-    const app = await buildApp({ config: { ...config, rateLimit }, logger: false })
+    const app = await buildApp({ config: { ...config, rateLimit: { perMinute }, redisUrl }, logger: false })
     app.get('/api/v1/_probe', async () => ({ ok: true }))
     apps.push(app)
     return app
@@ -54,7 +54,7 @@ describe('rate limits', () => {
   const probe = (app: App, headers: Record<string, string> = {}) =>
     app.inject({ method: 'GET', url: '/api/v1/_probe', headers })
 
-  it('shares one count across instances when RATE_LIMIT_REDIS_URL is set', async () => {
+  it('shares one count across instances when REDIS_URL is set', async () => {
     const shared = { perMinute: 2, redisUrl: 'redis://cache.internal:6379' }
     const first = await open(shared)
     const second = await open(shared)
@@ -71,7 +71,7 @@ describe('rate limits', () => {
     await probe(app, { authorization: 'Bearer raw-secret-token' })
     const keys = [...fake.state.counts.keys()]
     expect(keys.some((key) => key.includes('token:'))).toBe(true)
-    expect(keys.every((key) => key.startsWith('family-api-rate-limit:'))).toBe(true)
+    expect(keys.every((key) => key.startsWith('family-api:tendi_family_dev:rate-limit:'))).toBe(true)
     expect(keys.some((key) => key.includes('raw-secret-token'))).toBe(false)
   })
 

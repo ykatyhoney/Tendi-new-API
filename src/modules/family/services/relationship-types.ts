@@ -1,5 +1,6 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../lib/api-error.js'
+import type { Cache } from '../../../lib/cache.js'
 import { withStaffTransaction } from '../../../lib/with-transaction.js'
 import { rows, type Sql } from '../repositories/query.js'
 import { listActiveRelationshipTypes } from '../repositories/relationship-types.js'
@@ -24,7 +25,25 @@ interface StoredType extends RowDataPacket {
   status: 'active' | 'inactive'
 }
 
-export async function listRelationshipTypes(db: Sql): Promise<RelationshipTypeList> {
+/**
+ * The dropdown is cached because this API is the only writer of relationship_types and the list
+ * rarely changes. Create and patch clear it after they commit. The TTL bounds how long a read that
+ * raced a write, or a manual SQL edit, can keep an old list.
+ */
+export const RELATIONSHIP_TYPES_CACHE_KEY = 'relationship-types:active'
+const RELATIONSHIP_TYPES_TTL_SECONDS = 60
+
+export async function listRelationshipTypes(db: Sql, cache: Cache): Promise<RelationshipTypeList> {
+  const cached = await cache.get<RelationshipTypeList>(RELATIONSHIP_TYPES_CACHE_KEY)
+  if (cached !== undefined) {
+    return cached
+  }
+  const list = await readRelationshipTypes(db)
+  await cache.set(RELATIONSHIP_TYPES_CACHE_KEY, list, RELATIONSHIP_TYPES_TTL_SECONDS)
+  return list
+}
+
+async function readRelationshipTypes(db: Sql): Promise<RelationshipTypeList> {
   const types = await listActiveRelationshipTypes(db)
   return {
     items: types.map((row) => ({
@@ -40,10 +59,11 @@ export async function listRelationshipTypes(db: Sql): Promise<RelationshipTypeLi
 
 export async function createRelationshipType(
   pool: Pool,
+  cache: Cache,
   staffId: number,
   body: CreateRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
-  return withStaffTransaction(pool, staffId, async (connection) => {
+  const result = await withStaffTransaction(pool, staffId, async (connection) => {
     const existing = await lockType(connection, body.code)
     if (existing !== null) {
       throw duplicateCode()
@@ -77,16 +97,20 @@ export async function createRelationshipType(
     )
     return finishType(connection, body.code)
   })
+  // After the commit, so no other request can re-cache the list from before this write.
+  await cache.del(RELATIONSHIP_TYPES_CACHE_KEY)
+  return result
 }
 
 export async function patchRelationshipType(
   pool: Pool,
+  cache: Cache,
   staffId: number,
   code: string,
   body: PatchRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
   requireChange(body.label !== undefined || body.sortOrder !== undefined || body.status !== undefined)
-  return withStaffTransaction(pool, staffId, async (connection) => {
+  const result = await withStaffTransaction(pool, staffId, async (connection) => {
     const current = await lockType(connection, code)
     if (current === null) {
       throw new ApiError(404, 'NOT_FOUND', 'Relationship type not found')
@@ -116,6 +140,8 @@ export async function patchRelationshipType(
     }
     return finishType(connection, code)
   })
+  await cache.del(RELATIONSHIP_TYPES_CACHE_KEY)
+  return result
 }
 
 function assertUnlocked(current: StoredType, body: PatchRelationshipTypeBody): void {

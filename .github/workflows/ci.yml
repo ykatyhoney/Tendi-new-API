@@ -25,7 +25,7 @@ jobs:
       - run: npm run build
 
   database:
-    name: Schema, reconcile, API and DB tests (MariaDB 10.11)
+    name: Schema, reconcile, API and DB tests (MariaDB 10.11, Redis)
     runs-on: ubuntu-24.04
     # Ubuntu 24.04 ships MariaDB 10.11, installed with apt so the project's no-Docker rule holds here too.
     # This job imports db/tendi-family-dev-db-2026-11-06.sql and db/tendi_family_module.sql from the repository.
@@ -41,16 +41,20 @@ jobs:
       DB_ADMIN_PASSWORD: ci-root-password
       MARIADB_BIN: mariadb
       CORS_ORIGIN: http://127.0.0.1:3001
+      # The API suite runs against a real Redis here. The static job above runs without one (in-process fallback).
+      REDIS_URL: redis://127.0.0.1:6379/1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - name: Install MariaDB 10.11
+      - name: Install MariaDB 10.11 and Redis
         run: |
           sudo apt-get update
-          sudo apt-get install -y mariadb-server mariadb-client
+          sudo apt-get install -y mariadb-server mariadb-client redis-server
+          sudo systemctl start redis-server
+          redis-cli ping
           sudo systemctl start mariadb
           mariadb --version
           sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ADMIN_PASSWORD}'; FLUSH PRIVILEGES;"

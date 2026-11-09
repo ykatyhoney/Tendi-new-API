@@ -23,7 +23,7 @@ const relationshipTypeRoutes: FastifyPluginAsyncTypebox = async (app) => {
         response: { 200: relationshipTypeList },
       },
     },
-    async () => listRelationshipTypes(app.db),
+    async () => listRelationshipTypes(app.db, app.cache),
   )
 
   app.post(
@@ -36,7 +36,7 @@ const relationshipTypeRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
       preHandler: app.requireRelationshipAdmin,
     },
-    async (request) => createRelationshipType(app.db, staffId(request), request.body),
+    async (request) => createRelationshipType(app.db, app.cache, staffId(request), request.body),
   )
 
   app.patch(
@@ -50,7 +50,7 @@ const relationshipTypeRoutes: FastifyPluginAsyncTypebox = async (app) => {
       },
       preHandler: app.requireRelationshipAdmin,
     },
-    async (request) => patchRelationshipType(app.db, staffId(request), request.params.code, request.body),
+    async (request) => patchRelationshipType(app.db, app.cache, staffId(request), request.params.code, request.body),
   )
 }
 

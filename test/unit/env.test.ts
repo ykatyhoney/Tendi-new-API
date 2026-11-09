@@ -72,15 +72,18 @@ describe('loadConfig', () => {
   })
 
   it('defaults to 300 a minute in process memory, and accepts only a redis URL for a shared store', async () => {
-    expect((await loadConfig({ ...isolated, data: {} })).rateLimit).toEqual({ perMinute: 300, redisUrl: null })
+    const local = await loadConfig({ ...isolated, data: {} })
+    expect(local.rateLimit).toEqual({ perMinute: 300 })
+    expect(local.redisUrl).toBeNull()
     const shared = await loadConfig({
       ...isolated,
-      data: { RATE_LIMIT_PER_MINUTE: '120', RATE_LIMIT_REDIS_URL: ' rediss://cache.internal:6380/0 ' },
+      data: { RATE_LIMIT_PER_MINUTE: '120', REDIS_URL: ' rediss://cache.internal:6380/0 ' },
     })
-    expect(shared.rateLimit).toEqual({ perMinute: 120, redisUrl: 'rediss://cache.internal:6380/0' })
+    expect(shared.rateLimit).toEqual({ perMinute: 120 })
+    expect(shared.redisUrl).toBe('rediss://cache.internal:6380/0')
     await expect(
-      loadConfig({ ...isolated, data: { RATE_LIMIT_REDIS_URL: 'cache.internal:6379' } }),
-    ).rejects.toThrow(/RATE_LIMIT_REDIS_URL must be a redis/)
+      loadConfig({ ...isolated, data: { REDIS_URL: 'cache.internal:6379' } }),
+    ).rejects.toThrow(/REDIS_URL must be a redis/)
   })
 
   it('reads TRUST_PROXY as off, on, a hop count, or a list of proxies', async () => {
@@ -106,6 +109,19 @@ describe('configWarnings', () => {
     const warnings = configWarnings(config)
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('superadmin')
+  })
+
+  it('warns when production has no shared Redis', async () => {
+    const config = await loadConfig({
+      ...isolated,
+      data: {
+        ...productionSettings,
+        NODE_ENV: 'production',
+        ALLOWED_STAFF_TYPES: 'admin,superadmin',
+      },
+    })
+    expect(configWarnings(config)).toEqual([expect.stringContaining('REDIS_URL is not set')])
+    expect(configWarnings({ ...config, redisUrl: 'redis://cache.internal:6379' })).toEqual([])
   })
 
   it('is quiet when every relationship-admin type is a staff type', async () => {

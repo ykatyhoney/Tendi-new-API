@@ -67,13 +67,18 @@ const authPlugin: FastifyPluginAsync = async (app) => {
     request.staff = staff
     request.log = request.log.child({ staffId: staff.adminId })
 
-    // At most one write per token per minute, so reads do not each write the token row.
-    await app.db.query<ResultSetHeader>(
-      `UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP()
-       WHERE id = :tokenId
-         AND (last_seen_at IS NULL OR last_seen_at < UTC_TIMESTAMP() - INTERVAL ${LAST_SEEN_INTERVAL_SECONDS} SECOND)`,
-      { tokenId: row.tokenId },
-    )
+    // At most one write per token per minute. The claim is shared through Redis, so most requests skip
+    // the UPDATE entirely; the WHERE clause still guards when the claim is per process (no Redis, or an
+    // outage, where claim() says yes). The token lookup above is never cached: a revoked token or a
+    // deactivated account is refused on its next request.
+    if (await app.cache.claim(`last-seen:${row.tokenId}`, LAST_SEEN_INTERVAL_SECONDS)) {
+      await app.db.query<ResultSetHeader>(
+        `UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP()
+         WHERE id = :tokenId
+           AND (last_seen_at IS NULL OR last_seen_at < UTC_TIMESTAMP() - INTERVAL ${LAST_SEEN_INTERVAL_SECONDS} SECOND)`,
+        { tokenId: row.tokenId },
+      )
+    }
   })
 
   app.decorate('requireRelationshipAdmin', async (request: FastifyRequest) => {
@@ -87,4 +92,4 @@ const authPlugin: FastifyPluginAsync = async (app) => {
   })
 }
 
-export default fp(authPlugin, { name: 'family-auth', dependencies: ['family-db'] })
+export default fp(authPlugin, { name: 'family-auth', dependencies: ['family-db', 'family-redis'] })

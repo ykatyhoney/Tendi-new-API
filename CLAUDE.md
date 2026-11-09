@@ -25,6 +25,7 @@ Every write runs in `withStaffTransaction()` (READ COMMITTED; see the comment in
 - `src/modules/family/repositories/`: read SQL shared by several services. Functions take `Sql` (a pool or a transaction connection).
 - `src/modules/family/services/`: reads compose repositories and map rows with `mappers.ts`. `services/write/*`, `links.ts`, and `relationship-types.ts` hold their write SQL next to the locking and audit that must surround it.
 - `src/modules/family/services/mirror/`: `derive.ts` is pure; `load.ts` reads; `write.ts` writes under `@family_mirror = 1`.
+- Redis: optional and fail-open. Use `app.cache` (`src/lib/cache.ts`), never the client directly. Cache only data this API alone writes, delete the key after the write commits, and give every entry a TTL. Never cache the token lookup or family, contact, or child rows. See "Redis" in docs/CONTEXT.md.
 - Errors: throw `ApiError(status, CODE, message, details?)`. MariaDB errors are mapped in `src/lib/db-errors.ts`. Every route documents the `ApiError` body for 4XX and 5XX.
 
 ## Before you finish

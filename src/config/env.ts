@@ -39,8 +39,11 @@ export const envSchema = Type.Object({
   TRUST_PROXY: Type.String({ default: '' }),
   /** Requests a minute, counted per IP and per token. */
   RATE_LIMIT_PER_MINUTE: Type.Integer({ minimum: 1, maximum: 100000, default: 300 }),
-  /** redis:// or rediss:// URL. Empty keeps the counters in this process. Set it when more than one instance runs. */
-  RATE_LIMIT_REDIS_URL: Type.String({ default: '' }),
+  /**
+   * redis:// or rediss:// URL for the shared rate-limit counts and caches. Empty keeps both in this process,
+   * which is right for one instance. Redis is optional: when it is down the API keeps serving (fail-open).
+   */
+  REDIS_URL: Type.String({ default: '' }),
 })
 
 export type RawEnv = Type.Static<typeof envSchema>
@@ -67,9 +70,9 @@ export interface AppConfig {
   trustProxy: boolean | number | string[]
   rateLimit: {
     perMinute: number
-    /** null keeps the counters in process memory. */
-    redisUrl: string | null
   }
+  /** null keeps rate-limit counts and caches in process memory. */
+  redisUrl: string | null
 }
 
 export interface LoadConfigOptions {
@@ -134,7 +137,7 @@ export function parseRedisUrl(value: string): string | null {
     return null
   }
   if (!/^rediss?:\/\/\S+$/i.test(trimmed)) {
-    throw new Error('RATE_LIMIT_REDIS_URL must be a redis:// or rediss:// URL.')
+    throw new Error('REDIS_URL must be a redis:// or rediss:// URL.')
   }
   return trimmed
 }
@@ -177,8 +180,8 @@ export function toAppConfig(env: RawEnv): AppConfig {
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     rateLimit: {
       perMinute: env.RATE_LIMIT_PER_MINUTE,
-      redisUrl: parseRedisUrl(env.RATE_LIMIT_REDIS_URL),
     },
+    redisUrl: parseRedisUrl(env.REDIS_URL),
   }
 }
 
@@ -187,15 +190,23 @@ export function toAppConfig(env: RawEnv): AppConfig {
  * Staff auth runs before the relationship-admin check, so a relationship-admin type that is not
  * also a staff type is refused with 403 before it reaches the routes it was listed for (open item D5).
  */
-export function configWarnings(config: Pick<AppConfig, 'allowedStaffTypes' | 'relationshipAdminTypes'>): string[] {
+export function configWarnings(
+  config: Pick<AppConfig, 'nodeEnv' | 'allowedStaffTypes' | 'relationshipAdminTypes' | 'redisUrl'>,
+): string[] {
+  const warnings: string[] = []
   const unreachable = config.relationshipAdminTypes.filter((type) => !config.allowedStaffTypes.includes(type))
-  if (unreachable.length === 0) {
-    return []
+  if (unreachable.length > 0) {
+    warnings.push(
+      `RELATIONSHIP_ADMIN_TYPES lists ${unreachable.join(', ')}, which ALLOWED_STAFF_TYPES does not. ` +
+        'Those staff types are refused before they can manage relationship types.',
+    )
   }
-  return [
-    `RELATIONSHIP_ADMIN_TYPES lists ${unreachable.join(', ')}, which ALLOWED_STAFF_TYPES does not. ` +
-      'Those staff types are refused before they can manage relationship types.',
-  ]
+  if (config.nodeEnv === 'production' && config.redisUrl === null) {
+    warnings.push(
+      'REDIS_URL is not set. Rate limits and caches are kept per process, so each API instance counts and caches on its own.',
+    )
+  }
+  return warnings
 }
 
 export async function loadConfig(options: LoadConfigOptions = {}): Promise<AppConfig> {

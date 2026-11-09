@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { databaseNameForTarget, RESET_DATABASES } from '../src/lib/database-target.js'
-import { ensureFamilyApi, importDump, loadAdminConfig, recreateDatabase, runSql } from './mariadb-admin.js'
+import { clearDatabaseCache } from './clear-cache.js'
+import { ensureFamilyApi, importDump, loadAdminConfig, loadRedisUrl, recreateDatabase, runSql } from './mariadb-admin.js'
 
 const targetFlag = process.argv.indexOf('--target')
 const target = targetFlag === -1 ? '' : process.argv[targetFlag + 1] ?? ''
@@ -26,3 +27,9 @@ const databases = existing
 
 await ensureFamilyApi(config, databases)
 console.log(`Imported ${database} and granted family_api on ${databases.join(', ')}.`)
+
+const redisUrl = loadRedisUrl()
+if (redisUrl !== null) {
+  const removed = await clearDatabaseCache(redisUrl, database)
+  console.log(`Cleared ${removed} cached entr${removed === 1 ? 'y' : 'ies'} for ${database} in Redis.`)
+}

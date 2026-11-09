@@ -5,7 +5,7 @@ Fastify 5 API for Tendi's family module. It is the only writer of the family tab
 ```bash
 nvm use 26             # Node 26, see .nvmrc
 npm install
-cp .env.example .env   # set DB_ADMIN_PASSWORD and FAMILY_DB_PASSWORD
+cp .env.example .env   # set DB_ADMIN_PASSWORD and FAMILY_DB_PASSWORD; REDIS_URL is optional
 npm run db:dev:reset   # local MariaDB 10.11 only
 npm run dev            # http://127.0.0.1:3000, OpenAPI viewer at /docs
 ```

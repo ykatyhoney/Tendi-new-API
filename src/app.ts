@@ -10,6 +10,7 @@ import dbPlugin from './plugins/db.js'
 import errorsPlugin from './plugins/errors.js'
 import jsonBodyPlugin from './plugins/json-body.js'
 import openapiPlugin from './plugins/openapi.js'
+import redisPlugin from './plugins/redis.js'
 import securityPlugin from './plugins/security.js'
 
 declare module 'fastify' {
@@ -77,6 +78,7 @@ export async function buildApp(options: BuildAppOptions) {
   }
   await app.register(jsonBodyPlugin)
   await app.register(errorsPlugin)
+  await app.register(redisPlugin)
   await app.register(securityPlugin)
   await app.register(openapiPlugin)
   await app.register(dbPlugin)
