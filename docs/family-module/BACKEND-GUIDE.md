@@ -2,13 +2,13 @@
 
 Nov 6, 2026 · David Fried
 
-This guide builds the Family API in Tendi-new-API on Fastify 5.12.8 and Node.js 26, against the family module database of November 6, in 12 Claude Code steps (B0 to B11). The API is the only writer of the family tables and, through its mirror service, of the 28 old parent columns of linked children.
+This guide builds the Family API in Tendi-new-API on Fastify 5.12.8 and Node.js 26, against the family module database (written for the November 6 database; updated for revision 4 of November 9), in 12 Claude Code steps (B0 to B11). The API is the only writer of the family tables and, through its mirror service, of the 28 old parent columns of linked children.
 
 ## How to use this guide
 
 Each step is a prompt for Claude Code, started in the **Tendi-new-API** folder. Paste it in plan mode, approve the plan, let it build, then run the verify prompt (end of step B11) before merging.
 
-- **Inputs.** Put these in `<workspace>/db/`: `tendi-family-dev-db-2026-11-06.sql` (the full dev database), `tendi_family_module.sql` (revision 3, the schema), `tendi_family_dev_seed.sql` and `family_backfill_report.csv`.
+- **Inputs.** Put these in `<workspace>/db/`: `tendi-family-dev-db-2026-11-09.sql` (the full dev database), `tendi_family_module.sql` (revision 4, the schema script), `raul-tendi-db-2026-09-24_family.sql` (the 2026-09-24 dump with that script applied, the schema reference), `tendi_family_dev_seed.sql` and `family_backfill_report.csv`.
 - **One branch per step,** `family/<step>-<slug>`, never `main`. Push, open a pull request, merge after the verify prompt is green.
 - **Existing code.** If Tendi-new-API already has family code from the earlier playbook, B0 and B1 upgrade it and rename it to the new tables. The later steps say "implement or align": keep what matches this guide, change what doesn't.
 - **Rules for every step:** npm only, no Docker; local MariaDB 10.11 only (`tendi_family_dev` and `tendi_family_test` on 127.0.0.1), never production; the API never changes a legacy table's structure; no real SMS or email.
@@ -68,8 +68,9 @@ A save changes the family tables and the old columns in one transaction.
     |        v                                              | writes  registration sheet: 18 columns
     | c. Mirror the old columns  ---------------------------|------> (children_additional_information)
     |    @family_mirror = 1; write changed old columns      |              |
-    |    of every linked child; flag cleared in finally     |       Two lock triggers
-    |        |                                              |       Put back any other write and log it
+    |    of every linked child; flag cleared in finally     |       Three lock triggers
+    |        |                                              |       Put back any other write and log it,
+    |        |                                              |       family_id included (revision 4)
     |        v                                              |
     | d. Audit                                              |
     |    One audit_logs row per changed column              |
@@ -116,10 +117,20 @@ The schema belongs to `tendi_family_module.sql`; the API reads and writes data b
 
 | Database | Built from | Used by |
 | --- | --- | --- |
-| `tendi_family_dev` | `tendi-family-dev-db-2026-11-06.sql` | `npm run dev`, manual testing, Tendi-new |
+| `tendi_family_dev` | `tendi-family-dev-db-2026-11-09.sql` | `npm run dev`, manual testing, Tendi-new |
 | `tendi_family_test` | The same file, reset before each test run | `npm test` |
 
 **The `family_api` account.** Created with section 6 of `tendi_family_module.sql` as `family_api@localhost`, password in `.env`. It may write the family tables, update only `children.family_id` and the 28 parent columns, insert missing `children_additional_information` rows, read `children`, `classes`, `branches`, `admin_api_tokens` and six columns of `admin`, and insert into `audit_logs`. It can't delete relationship types or read `admin.password`. The lock triggers let a write to the 28 columns through only from this account with `@family_mirror = 1`.
+
+**The lock (revision 4).** There are three lock triggers. `trg_children_family_bu` and `trg_cai_family_bu` put back a write to a linked child's 28 parent columns. Since revision 4, `trg_children_family_bu` also locks `children.family_id`: a link, relink or unlink from any other account, or from `family_api` without the flag, is put back and logged in `family_mirror_lock_log` with `col_name = 'family_id'`. The new `trg_children_family_bi` sets `family_id` to NULL on an `INSERT INTO children` that arrives linked, and logs it. Before revision 4, clearing `family_id`, writing a parent column and setting `family_id` back got past the lock. The flag from root does not open the lock.
+
+**Emergency unlink.** One exception, from any account: with `@family_unlink = 1`, `family_id` can be set to NULL, unlogged. It can't link or relink. Reset the flag in the same session:
+
+```sql
+SET @family_unlink = 1;
+UPDATE children SET family_id = NULL WHERE id = <child id>;
+SET @family_unlink = NULL;
+```
 
 **Pool settings:** mysql2 promise pool, `charset: 'utf8mb4'`, `dateStrings: true` (the legacy tables hold `0000-00-00` dates), `timezone: 'Z'`, `supportBigNumbers: true`, `namedPlaceholders: true`, `connectionLimit` from env (default 10). Read `bit(1)` columns as numbers (`col + 0`).
 
@@ -203,7 +214,7 @@ One pure function, `deriveLegacyValues(child, family)`, turns the family tables 
 2. A value longer than its old column is refused with 409 `VALUE_TOO_LONG`, naming the column. Never cut a value short.
 3. A linked child without a `children_additional_information` row gets one.
 4. Only columns whose value changes are written.
-5. Before writing: `SET @family_mirror = 1`. After, in a `finally` block: `SET @family_mirror = NULL`. The lock triggers let the write through only from `family_api` with the flag set.
+5. Before writing: `SET @family_mirror = 1`. After, in a `finally` block: `SET @family_mirror = NULL`. The lock triggers let the write through only from `family_api` with the flag set. That includes `children.family_id` (revision 4), so link and unlink set the flag on the same connection too.
 6. Affected children: a family, member or rights change re-mirrors that family's linked children; a contact, phone, email or address change re-mirrors the linked children of every family the contact belongs to.
 7. Each transaction starts with `SELECT ... FOR UPDATE` on the family rows it touches, so two saves on one family run one after the other. On MariaDB error 1213 (deadlock; Galera in production) retry the whole transaction once.
 
@@ -230,7 +241,7 @@ Vitest 5 against a real MariaDB: `tendi_family_test`, rebuilt from the dev dump 
 | Suite | What it proves |
 | --- | --- |
 | `test:unit` | `deriveLegacyValues` for each case: father only, mother only, step-parent in the slot, both parents, two payment-responsible members, contact in two households, no mobile, home phone but no mobile, an "Other" phone with a name, a value too long for its column |
-| `test:db` | Schema matches `tendi_family_module.sql`; parity for all 624 linked children; `family_api` can't update a non-parent column of `children`; the lock puts back a root write to a linked child's parent column and logs it |
+| `test:db` | Schema matches `tendi_family_module.sql`; parity for all 624 linked children; `family_api` can't update a non-parent column of `children`; the lock puts back a root write to a linked child's parent column and logs it; revision 4 locks `family_id` and new linked rows (`test/db/lock-revision-4.test.ts`) |
 | `test:api` | Every route through `app.inject()`: 200 path, 400 validation, 401, 403, 404 and every 409 code; each write updates the old columns of its affected children in the same transaction and returns `affected_child_ids`; a failed write leaves both the family tables and the old columns unchanged |
 
 Also: two concurrent edits to one family both succeed one after the other; a 9-child family edit completes in under 300 ms locally; the exported `openapi/family.json` matches the running app.
@@ -253,10 +264,10 @@ Write docs/UPGRADE-2026-11.md: what changed, what broke, what's left. Run typech
 ### B1 Databases, account and table names
 
 ```text
-Read BACKEND-GUIDE.md "Database". The schema comes only from ../db/tendi_family_module.sql (revision 3) and the data from ../db/tendi-family-dev-db-2026-11-06.sql. Branch family/b1-database.
+Read BACKEND-GUIDE.md "Database". The schema comes only from ../db/tendi_family_module.sql (revision 4) and the data from ../db/tendi-family-dev-db-2026-11-09.sql. Branch family/b1-database.
 1. npm run db:dev:reset and db:test:reset: create tendi_family_dev / tendi_family_test (utf8mb4, utf8mb4_general_ci) and import the dev dump with the mariadb client. Refuse any host but 127.0.0.1 or localhost and any other database name.
 2. Create family_api@localhost with the grants in section 6 of tendi_family_module.sql on both databases, password from .env.
-3. If this project has its own migrations for the family tables, retire them: the family schema comes only from tendi_family_module.sql. Add npm run db:verify-schema, which compares columns, types, generated columns, indexes, foreign keys with their rules, check constraints and the two lock triggers of a database with a fresh build of the 2026-09-24 dump plus tendi_family_module.sql, and fails on any difference.
+3. If this project has its own migrations for the family tables, retire them: the family schema comes only from tendi_family_module.sql. Add npm run db:verify-schema, which compares columns, types, generated columns, indexes, foreign keys with their rules, check constraints and the three lock triggers of a database with a fresh build of the 2026-09-24 dump plus tendi_family_module.sql (../db/raul-tendi-db-2026-09-24_family.sql), and fails on any difference.
 4. Rename in code, tests and docs: people -> family_contacts, people_phones/emails/addresses -> family_contact_phones/emails/addresses, person_id -> family_contact_id, primary_person_id -> primary_family_contact_id. Search to prove nothing uses the old names.
 5. src/plugins/db.ts: one mysql2 promise pool as family_api with the settings in "Pool settings", and lib/withTransaction(fn) that every write uses.
 Run db:verify-schema on both databases and show me the output.
@@ -398,7 +409,7 @@ Check the work on this branch against docs/family-module/BACKEND-GUIDE.md and th
 - [ ] **Real staff sign-in:** waits for the PHP team to confirm how `admin_api_tokens.token_hash` and `admin.password` are made and whether tokens expire. Until then, dev tokens only.
 - [ ] **One main contact per household:** not enforced by the database yet. The API enforces it (B6); a database rule needs `fk_fm_family` changed to ON UPDATE RESTRICT.
 - [ ] **`/people` alias:** remove it once Tendi-new calls `/contacts`.
-- [ ] **Confirm with Mr. Khan:** the `family_contacts` names, keeping `phone_normalized`, and the two lock triggers.
+- [ ] **Confirm with Mr. Khan:** the `family_contacts` names, keeping `phone_normalized`, and the three lock triggers (revision 4 locks `family_id` and adds `trg_children_family_bi` and `@family_unlink`).
 
 ## Sources
 
@@ -406,4 +417,4 @@ Check the work on this branch against docs/family-module/BACKEND-GUIDE.md and th
 - Fastify V5 Migration Guide (https://fastify.dev/docs/latest/Guides/Migration-Guide-V5.md): Node 20 minimum, full JSON Schemas, `loggerInstance`, `routeOptions` and the other changes listed under the stack table.
 - Node.js release lines (https://endoflife.date/nodejs): Node 26 is the Active LTS, security support until April 30, 2029.
 - @fastify/type-provider-typebox on npm (https://www.npmjs.com/package/@fastify/type-provider-typebox): version 6 takes `typebox` as its peer dependency.
-- The database: `tendi_family_module.sql` (revision 3), `tendi-family-dev-db-2026-11-06.sql`, and the Tendi Family Module design document of October 29, 2026.
+- The database: `tendi_family_module.sql` (revision 4, 2026-11-09), `tendi-family-dev-db-2026-11-09.sql`, `raul-tendi-db-2026-09-24_family.sql`, and the Tendi Family Module design document of October 29, 2026.

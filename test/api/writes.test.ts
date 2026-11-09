@@ -7,6 +7,7 @@ import { loadConfig } from '../../src/config/env.js'
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from '../../src/modules/family/services/mirror/types.js'
 import { issueDevToken, revokeDevTokens } from '../../scripts/dev-token.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
+import { asFamilyApi, unlinkWithFlag } from '../helpers/lock.js'
 
 const TEST_DATABASE = 'tendi_family_test'
 const BIT_COLUMNS = new Set(['use_father_phone_for_notification', 'use_mother_phone_for_notification'])
@@ -593,8 +594,11 @@ describe('family writes', () => {
     expect(children).toHaveLength(2)
     const snapshots = await Promise.all(children.map((childId) => snapshotChild(childId)))
     borrowed.push(...snapshots)
-    await connection.query(`UPDATE children SET family_id = ? WHERE id = ?`, [first.family.id, children[0]])
-    await connection.query(`UPDATE children SET family_id = ? WHERE id = ?`, [second.family.id, children[1]])
+    // Revision 4 puts back a family_id change from root, so the fixture links as family_api with the flag.
+    await asFamilyApi(app.db, async (familyApi) => {
+      await familyApi.query(`UPDATE children SET family_id = ? WHERE id = ?`, [first.family.id, children[0]])
+      await familyApi.query(`UPDATE children SET family_id = ? WHERE id = ?`, [second.family.id, children[1]])
+    })
 
     const changed = await app.inject({
       method: 'PUT',
@@ -758,7 +762,10 @@ async function snapshotChild(childId: number): Promise<ChildSnapshot> {
 
 async function restoreBorrowed(): Promise<void> {
   for (const child of borrowed) {
-    await connection.query(`UPDATE children SET family_id = ? WHERE id = ?`, [child.familyId, child.id])
+    if (child.familyId !== null) {
+      throw new Error(`Child ${child.id} was linked when borrowed. This fixture only puts children back to unlinked.`)
+    }
+    await unlinkWithFlag(connection, child.id)
     await connection.query(
       `UPDATE children SET ${assignments(CHILDREN_MIRROR_COLUMNS)} WHERE id = ?`,
       [...values(CHILDREN_MIRROR_COLUMNS, child.children), child.id],

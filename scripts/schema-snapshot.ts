@@ -2,7 +2,8 @@ import type { SchemaSnapshot } from '../src/lib/schema-diff.js'
 import type { AdminConfig } from './mariadb-admin.js'
 import { runSql } from './mariadb-admin.js'
 
-const LOCK_TRIGGERS = ['trg_children_family_bu', 'trg_cai_family_bu'] as const
+/** The revision 4 lock triggers: family_id and the mirrored columns on children, and new children rows. */
+export const LOCK_TRIGGERS = ['trg_cai_family_bu', 'trg_children_family_bi', 'trg_children_family_bu'] as const
 
 export async function readSchemaSnapshot(config: AdminConfig, database: string): Promise<SchemaSnapshot> {
   const columns = await query(
@@ -50,7 +51,7 @@ export async function readSchemaSnapshot(config: AdminConfig, database: string):
             REPLACE(REPLACE(ACTION_STATEMENT, CHAR(10), ' '), CHAR(13), ' ')
      FROM information_schema.TRIGGERS
      WHERE TRIGGER_SCHEMA = DATABASE()
-       AND TRIGGER_NAME IN ('${LOCK_TRIGGERS[0]}', '${LOCK_TRIGGERS[1]}')
+       AND TRIGGER_NAME IN (${LOCK_TRIGGERS.map((name) => `'${name}'`).join(', ')})
      ORDER BY TRIGGER_NAME`,
   )
   return { columns, indexes, foreignKeys, checks, lockTriggers }
