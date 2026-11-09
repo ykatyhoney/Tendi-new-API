@@ -6,7 +6,7 @@ The build steps and the rules for each one are in [family-module/BACKEND-GUIDE.m
 
 ## Current state
 
-B0 is the Fastify scaffold. B1 adds the local databases, the `family_api` account, one mysql2 pool, and `withTransaction()`. B2 adds the error shape, helmet, CORS, rate limits, OpenAPI, and `GET /api/v1/health`. B3 requires a staff bearer token on every family route except health. B4 adds the read routes: family search and detail, contacts, a child's linked or draft family, and active relationship types. B5 adds the mirror: `deriveLegacyValues`, `writeMirror`, and the affected-child lookup. B6 wires that mirror into the family, member, and contact writes. Each write locks the household, changes the family tables, re-mirrors affected linked children, and writes one `audit_logs` row per changed column. Rights, link, and unlink come next.
+B0 is the Fastify scaffold. B1 adds the local databases, the `family_api` account, one mysql2 pool, and `withTransaction()`. B2 adds the error shape, helmet, CORS, rate limits, OpenAPI, and `GET /api/v1/health`. B3 requires a staff bearer token on every family route except health. B4 adds the read routes: family search and detail, contacts, a child's linked or draft family, and active relationship types. B5 adds the mirror: `deriveLegacyValues`, `writeMirror`, and the affected-child lookup. B6 wires that mirror into the family, member, and contact writes. Each write locks the household, changes the family tables, re-mirrors affected linked children, and writes one `audit_logs` row per changed column. B7 adds rights for one child, a preview of the 28 old values, link, and unlink. Link writes the preview's values under the mirror flag. Unlink clears `family_id` and leaves those values. B8 lets relationship admins add a relationship type and change its label, order, or status. `father`, `mother`, `step_father`, and `step_mother` cannot be renamed or deactivated. The dropdown returns active types only. B9 adds `family:reconcile`, which compares every linked child's 28 stored parent columns with the derived values and writes nothing unless `--child` and `--fix` are both set. B10 checks concurrent saves, a save on the largest family, placeholders, paging, response schemas, and `npm audit`. B11 reset the test database, verified the schema, and passed typecheck, lint, the full test suite, `family:reconcile` (624 linked children, 0 differences), and `export:openapi`. A live walk-through on `tendi_family_dev` searched a family by the father's mobile, opened it, added a grandmother with an Other phone labeled "Grandma's cell" (no old columns changed), edited that mobile (`father_phone` on the linked child followed it), previewed an unlinked child without writing, linked it to the previewed values, and unlinked it with those values left in place. The dev rows were put back, and reconcile again reported 0 differences.
 
 ## Databases
 
@@ -22,7 +22,9 @@ npm run db:verify-schema
 
 `db/tendi_family_module.sql` is the 2026-09-24 dump with family revision 3 applied. It has no `CREATE USER`. `db:verify-schema` imports it into `tendi_family_schema_ref` and compares columns, generated columns, indexes, foreign keys and their rules, check constraints, and the two lock triggers. The account grants follow the design's section 6 table: full access to the seven family tables, no delete on `relationship_types`, update only `children.family_id` and the 28 parent columns, insert on `children_additional_information`, read on `classes`, `branches`, and `admin_api_tokens`, six columns of `admin` (not `password`), and insert on `audit_logs`. Staff auth also updates `admin_api_tokens.last_seen_at`, so the account has `UPDATE` on that column and nothing else on the table. The account is created for both `localhost` and `127.0.0.1` because the pool connects to `DB_HOST`.
 
-The pool is one mysql2 promise pool: `utf8mb4`, `dateStrings: true`, `timezone: 'Z'`, `supportBigNumbers`, named placeholders, and `bit(1)` values as numbers. `withTransaction()` commits or rolls back, clears `@family_mirror` and `@audit_user` before releasing the connection, and retries once on error 1213.
+The pool is one mysql2 promise pool: `utf8mb4`, `dateStrings: true`, `timezone: 'Z'`, `supportBigNumbers`, named placeholders, and `bit(1)` values as numbers. `withTransaction()` commits or rolls back, clears `@family_mirror` and `@audit_user` before releasing the connection, and retries once on error 1213. Two saves of the same family take its row lock, so they commit one after the other. A test sends both with `Promise.all` and both return 200.
+
+The lock triggers `trg_children_family_bu` and `trg_cai_family_bu` put a linked child's 28 parent columns back unless the statement runs as `family_api` with `@family_mirror = 1`. `family_id` itself is not one of those columns. `writeMirror` sets the flag for the statement and clears it before the connection returns to the pool. Unlink sets `family_id` to NULL and does not rewrite the 28 columns.
 
 ## How to start
 
@@ -46,11 +48,27 @@ npm run dev
 
 ## What a save will do
 
-A family, member, or contact write runs in one transaction: lock the family rows, update the family tables, mirror the 28 old columns for the affected children, and write `audit_logs` (`type` `family`, `actor_type` `staff`, `actor_ref` `tendi-new`). The response is the saved family or contact plus `affected_child_ids`, the children whose old columns changed. `GET /families/:id` still hides a trashed family. A trashed membership is revived when that contact is added again. Phone, email, and address saves replace the whole list. If any step fails, the family tables and the old columns roll back together.
+A family, member, contact, rights, or link write runs in one transaction: lock the family rows, update the family tables, mirror the 28 old columns for the affected children, and write `audit_logs` (`type` `family`, `actor_type` `staff`, `actor_ref` `tendi-new`). The response includes `affected_child_ids`, the children whose old columns changed. `GET /families/:id/children/:childId/preview` writes nothing: it shows each of the 28 values today and after linking, whether it would change, and whether it is too long for the old column. Link refuses when the child belongs to another family or the family has no active member. Unlink sets `children.family_id` back to NULL and does not change the 28 values. `GET /families/:id` still hides a trashed family. A trashed membership is revived when that contact is added again. Phone, email, and address saves replace the whole list. If any step fails, the family tables and the old columns roll back together.
+
+## Hardening
+
+A warmed `PATCH` of household phone on the largest family (family 16, 9 linked children) took 67 ms on this machine, under the 300 ms budget. The test restores the original phone. The slowest five measured routes, in milliseconds:
+
+| Route | ms |
+| --- | ---: |
+| `GET /api/v1/health` | 110 |
+| `PATCH /api/v1/families/:id` | 67 |
+| `GET /api/v1/children/:childId/family` | 62 |
+| `GET /api/v1/contacts` | 26 |
+| `GET /api/v1/families?q` | 17 |
+
+Health is the slow one because it reads `information_schema`. Family and contact search are paged (`page` default 1, `pageSize` default 25, maximum 100). `GET /relationship-types` returns the whole active dropdown; that list is the set of types, not a search page. Every response object sets `additionalProperties: false`, so a response leaves out fields the schema does not declare. SQL values use `?`. Column and table names that are spliced into a statement come from a fixed list and go through `quoteIdentifier`, or they are constant SQL. The health check's table-name list uses placeholders.
+
+`npm audit` reports 10 moderate findings, all `minimatch` before 11.0.1 (`GHSA-g3hv-75wg-m249`) through ESLint 10 and typescript-eslint 8. Those packages are dev dependencies. The latest release of each pinned major still depends on `minimatch` 10, and the only audit fix downgrades ESLint to 9. Nothing was upgraded.
 
 ## Scripts
 
-`dev`, `build`, `start`, `typecheck`, `lint`, `test`, `db:dev:reset`, `db:test:reset`, `db:verify-schema`, `export:openapi`, and `family:dev-token` work. `export:openapi` writes `openapi/family.json`. `family:dev-token -- --admin <id>` creates a token for an active account in `DB_NAME` and prints it once; `--revoke <id>` removes tokens with device id `tendi-new-dev`. It refuses any database other than `tendi_family_dev` and `tendi_family_test`. Reconcile still exits with a message until its step is built.
+`dev`, `build`, `start`, `typecheck`, `lint`, `test`, `db:dev:reset`, `db:test:reset`, `db:verify-schema`, `export:openapi`, `family:dev-token`, and `family:reconcile` work. `export:openapi` writes `openapi/family.json`. `family:dev-token -- --admin <id>` creates a token for an active account in `DB_NAME` and prints it once; `--revoke <id>` removes tokens with device id `tendi-new-dev`. `family:reconcile` reads `DB_NAME`, prints each difference, and writes `results/reconcile-<date>.json`. It exits with code 1 when any linked child differs. `family:reconcile -- --child <id> --fix` re-mirrors that one child in a transaction. It is not scheduled. Both commands refuse any database other than `tendi_family_dev` and `tendi_family_test`.
 
 ## Open items
 

@@ -3,6 +3,7 @@ import childRoutes from './routes/children.js'
 import contactRoutes from './routes/contacts.js'
 import familyRoutes from './routes/families.js'
 import healthRoutes from './routes/health.js'
+import linkRoutes from './routes/links.js'
 import relationshipTypeRoutes from './routes/relationship-types.js'
 
 export interface FamilyModuleOptions {
@@ -25,6 +26,7 @@ const familyModule: FastifyPluginAsync<FamilyModuleOptions> = async (app, option
   await app.register(familyRoutes)
   await app.register(contactRoutes)
   await app.register(childRoutes)
+  await app.register(linkRoutes)
   await app.register(relationshipTypeRoutes)
   if (options.extraRoutes !== undefined) {
     await app.register(options.extraRoutes)

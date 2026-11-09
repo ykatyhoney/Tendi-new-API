@@ -6010,6 +6010,492 @@
         }
       }
     },
+    "/api/v1/families/{id}/children/{childId}/rights": {
+      "put": {
+        "operationId": "replaceChildRights",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rights"
+                ],
+                "properties": {
+                  "rights": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "memberId",
+                        "receivesNotifications",
+                        "notifyMethod",
+                        "mayCollect",
+                        "collectFrom",
+                        "collectTo",
+                        "isEmergency",
+                        "isPaymentResponsible"
+                      ],
+                      "properties": {
+                        "memberId": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "receivesNotifications": {
+                          "type": "boolean"
+                        },
+                        "notifyMethod": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "sms"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "voice"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "both"
+                              ]
+                            }
+                          ]
+                        },
+                        "mayCollect": {
+                          "type": "boolean"
+                        },
+                        "collectFrom": {
+                          "type": "string",
+                          "format": "date",
+                          "nullable": true
+                        },
+                        "collectTo": {
+                          "type": "string",
+                          "format": "date",
+                          "nullable": true
+                        },
+                        "isEmergency": {
+                          "type": "boolean"
+                        },
+                        "isPaymentResponsible": {
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "familyId",
+                    "childId",
+                    "rights",
+                    "affected_child_ids"
+                  ],
+                  "properties": {
+                    "familyId": {
+                      "type": "integer"
+                    },
+                    "childId": {
+                      "type": "integer"
+                    },
+                    "rights": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "memberId",
+                          "childId",
+                          "receivesNotifications",
+                          "notifyMethod",
+                          "mayCollect",
+                          "collectFrom",
+                          "collectTo",
+                          "isEmergency",
+                          "isPaymentResponsible"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "memberId": {
+                            "type": "integer"
+                          },
+                          "childId": {
+                            "type": "integer"
+                          },
+                          "receivesNotifications": {
+                            "type": "boolean"
+                          },
+                          "notifyMethod": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sms"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "voice"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "both"
+                                ]
+                              }
+                            ]
+                          },
+                          "mayCollect": {
+                            "type": "boolean"
+                          },
+                          "collectFrom": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "collectTo": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "isEmergency": {
+                            "type": "boolean"
+                          },
+                          "isPaymentResponsible": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "affected_child_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/families/{id}/children/{childId}/preview": {
+      "get": {
+        "operationId": "previewChildLink",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "childId",
+                    "familyId",
+                    "currentFamilyId",
+                    "columns"
+                  ],
+                  "properties": {
+                    "childId": {
+                      "type": "integer"
+                    },
+                    "familyId": {
+                      "type": "integer"
+                    },
+                    "currentFamilyId": {
+                      "type": "integer",
+                      "nullable": true
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "column",
+                          "table",
+                          "today",
+                          "after",
+                          "changed",
+                          "tooLong"
+                        ],
+                        "properties": {
+                          "column": {
+                            "type": "string"
+                          },
+                          "table": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "children"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "children_additional_information"
+                                ]
+                              }
+                            ]
+                          },
+                          "today": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "object",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          "after": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "object",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
+                            ]
+                          },
+                          "changed": {
+                            "type": "boolean"
+                          },
+                          "tooLong": {
+                            "type": "boolean"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/families/{id}/children/{childId}/link": {
+      "post": {
+        "operationId": "linkChild",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "childId",
+                    "familyId",
+                    "affected_child_ids"
+                  ],
+                  "properties": {
+                    "childId": {
+                      "type": "integer"
+                    },
+                    "familyId": {
+                      "type": "integer"
+                    },
+                    "affected_child_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/children/{childId}/unlink": {
+      "post": {
+        "operationId": "unlinkChild",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "childId",
+                    "familyId",
+                    "affected_child_ids"
+                  ],
+                  "properties": {
+                    "childId": {
+                      "type": "integer"
+                    },
+                    "familyId": {
+                      "type": "object",
+                      "nullable": true,
+                      "enum": [
+                        null
+                      ]
+                    },
+                    "affected_child_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/relationship-types": {
       "get": {
         "operationId": "listRelationshipTypes",
@@ -6089,6 +6575,294 @@
                           }
                         },
                         "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRelationshipType",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "code",
+                  "label",
+                  "sortOrder"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32,
+                    "pattern": "^[a-z_]+$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "sortOrder": {
+                    "type": "integer"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "relationshipType",
+                    "affected_child_ids"
+                  ],
+                  "properties": {
+                    "relationshipType": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "label",
+                        "parentSlot",
+                        "slotRank",
+                        "sortOrder",
+                        "status"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "parentSlot": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "father"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "mother"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "slotRank": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "sortOrder": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "active"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "inactive"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "affected_child_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/relationship-types/{code}": {
+      "patch": {
+        "operationId": "patchRelationshipType",
+        "tags": [
+          "family"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "sortOrder": {
+                    "type": "integer"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "active"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "inactive"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32,
+              "pattern": "^[a-z_]+$"
+            },
+            "in": "path",
+            "name": "code",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "relationshipType",
+                    "affected_child_ids"
+                  ],
+                  "properties": {
+                    "relationshipType": {
+                      "type": "object",
+                      "required": [
+                        "code",
+                        "label",
+                        "parentSlot",
+                        "slotRank",
+                        "sortOrder",
+                        "status"
+                      ],
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "parentSlot": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "father"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "mother"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "nullable": true,
+                              "enum": [
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        "slotRank": {
+                          "type": "integer",
+                          "nullable": true
+                        },
+                        "sortOrder": {
+                          "type": "integer"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "active"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "inactive"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "affected_child_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
                       }
                     }
                   },

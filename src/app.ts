@@ -8,6 +8,7 @@ import familyModule, { type FamilyModuleOptions } from './modules/family/plugin.
 import authPlugin from './plugins/auth.js'
 import dbPlugin from './plugins/db.js'
 import errorsPlugin from './plugins/errors.js'
+import jsonBodyPlugin from './plugins/json-body.js'
 import openapiPlugin from './plugins/openapi.js'
 import securityPlugin from './plugins/security.js'
 
@@ -37,7 +38,7 @@ const REDACT_PATHS = [
 
 /**
  * Builds the Family API without listening. Tests call this and use app.inject().
- * Health stays open. Other family routes require staff auth. Family, member, and contact writes mirror linked children in the same transaction.
+ * Health stays open. Other family routes require staff auth. Writes mirror linked children in the same transaction.
  */
 export async function buildApp(options: BuildAppOptions) {
   const { config } = options
@@ -64,6 +65,7 @@ export async function buildApp(options: BuildAppOptions) {
     .withTypeProvider<TypeBoxTypeProvider>()
 
   app.decorate('config', config)
+  await app.register(jsonBodyPlugin)
   await app.register(errorsPlugin)
   await app.register(securityPlugin)
   await app.register(openapiPlugin)

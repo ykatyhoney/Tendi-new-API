@@ -49,15 +49,17 @@ async function assertFamilySchema(db: Pool): Promise<void> {
     `SELECT COLUMN_NAME AS name
      FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'children'
-       AND COLUMN_NAME = 'family_id'`,
+       AND TABLE_NAME = ?
+       AND COLUMN_NAME = ?`,
+    ['children', 'family_id'],
   )) as [RowDataPacket[], unknown]
 
   const [tableRows] = (await db.query(
     `SELECT TABLE_NAME AS name
      FROM information_schema.TABLES
      WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME IN (${FAMILY_MODULE_TABLES.map((name) => `'${name}'`).join(', ')})`,
+       AND TABLE_NAME IN (${FAMILY_MODULE_TABLES.map(() => '?').join(', ')})`,
+    [...FAMILY_MODULE_TABLES],
   )) as [RowDataPacket[], unknown]
 
   const present = new Set(tableRows.map((row) => String(row['name'])))

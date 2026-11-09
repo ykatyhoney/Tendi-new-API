@@ -64,6 +64,43 @@ describe('family core', () => {
     })
   })
 
+  it('accepts an empty JSON body and still rejects invalid JSON', async () => {
+    const app = await open()
+    app.post('/api/v1/_empty', async (request) => ({ empty: request.body === null || jsonObject(request.body) }))
+    app.post(
+      '/api/v1/_needs-body',
+      { schema: { body: Type.Object({ name: Type.String({ minLength: 1 }) }) } },
+      async () => ({ ok: true }),
+    )
+
+    const empty = await app.inject({
+      method: 'POST',
+      url: '/api/v1/_empty',
+      headers: { 'content-type': 'application/json' },
+      payload: '',
+    })
+    expect(empty.statusCode).toBe(200)
+    expect(empty.json()).toEqual({ empty: true })
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/api/v1/_needs-body',
+      headers: { 'content-type': 'application/json' },
+      payload: '',
+    })
+    expect(missing.statusCode).toBe(400)
+    expect(missing.json().code).toBe('VALIDATION')
+
+    const invalid = await app.inject({
+      method: 'POST',
+      url: '/api/v1/_empty',
+      headers: { 'content-type': 'application/json' },
+      payload: '{',
+    })
+    expect(invalid.statusCode).toBe(400)
+    expect(invalid.json().message).toContain('not valid JSON')
+  })
+
   it('hides SQL when a database error is not a known constraint', async () => {
     const app = await open()
     app.get('/api/v1/_boom', async () => {
@@ -79,6 +116,10 @@ describe('family core', () => {
     expect(response.body).not.toContain('secret-hash')
     expect(response.body).not.toContain('INSERT')
   })
+
+  function jsonObject(value: unknown): boolean {
+    return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0
+  }
 
   async function open(overrides: Partial<AppConfig> = {}): Promise<App> {
     const config = await loadConfig()

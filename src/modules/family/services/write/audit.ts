@@ -5,11 +5,13 @@ export type AuditAction = 'insert' | 'update' | 'delete'
 
 export interface AuditChange {
   table: string
-  id: number
+  id: number | null
   action: AuditAction
   column: string
   oldValue: string | null
   newValue: string | null
+  /** Set when the row's key is not a number, such as a relationship code. */
+  entity?: string | null
 }
 
 export function auditValue(value: string | number | null): string | null {
@@ -18,17 +20,18 @@ export function auditValue(value: string | number | null): string | null {
 
 export function columnChanges(
   table: string,
-  id: number,
+  id: number | null,
   action: AuditAction,
   before: Record<string, string | null>,
   after: Record<string, string | null>,
+  entity?: string,
 ): AuditChange[] {
   const changes: AuditChange[] = []
   for (const column of Object.keys(after)) {
     const oldValue = before[column] ?? null
     const newValue = after[column] ?? null
     if (oldValue !== newValue) {
-      changes.push({ table, id, action, column, oldValue, newValue })
+      changes.push({ table, id, action, column, oldValue, newValue, entity: entity ?? null })
     }
   }
   return changes
@@ -42,7 +45,7 @@ export async function writeAudit(
   if (changes.length === 0) {
     return
   }
-  const values = changes.map(() => `(?, ?, ?, ?, ?, ?, ?, ?, 'staff', 'tendi-new')`).join(', ')
+  const values = changes.map(() => `(?, ?, ?, ?, ?, ?, ?, ?, 'staff', 'tendi-new', ?)`).join(', ')
   const params = changes.flatMap((change) => [
     'family',
     change.table,
@@ -52,10 +55,11 @@ export async function writeAudit(
     change.newValue,
     staffId,
     change.id,
+    change.entity ?? null,
   ])
   await connection.query<ResultSetHeader>(
     `INSERT INTO audit_logs
-       (type, table_name, action, col_name, old_value, new_value, user_id, table_id, actor_type, actor_ref)
+       (type, table_name, action, col_name, old_value, new_value, user_id, table_id, actor_type, actor_ref, entity_name)
      VALUES ${values}`,
     params,
   )

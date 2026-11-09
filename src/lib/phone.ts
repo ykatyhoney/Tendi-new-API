@@ -1,3 +1,5 @@
+import { quoteIdentifier } from './sql.js'
+
 const EXTENSION = /(?:ext\.?|x|#).*$/i
 
 /** Digits of a phone after the extension marker is removed. Matches the stored phone expression. */
@@ -22,7 +24,8 @@ export function phoneSearchKey(query: string): string | null {
  * The column text is chosen by this code, never by a request.
  */
 export function normalizedPhoneSql(column: string): string {
-  const digits = digitSql(column)
+  const quoted = column.split('.').map((part) => quoteIdentifier(part)).join('.')
+  const digits = digitSql(quoted)
   return `CASE WHEN CHAR_LENGTH(${digits}) >= 10 THEN RIGHT(${digits}, 10) ELSE '' END`
 }
 
