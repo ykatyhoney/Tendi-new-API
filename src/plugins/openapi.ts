@@ -37,7 +37,17 @@ const openapiPlugin: FastifyPluginAsync = async (app) => {
   })
 
   if (app.config.nodeEnv !== 'production') {
-    await app.register(swaggerUi, { routePrefix: '/docs' })
+    await app.register(swaggerUi, {
+      routePrefix: '/docs',
+      uiConfig: {
+        // The default (1) folds every field of a model to [...], so types were hidden until clicked open.
+        defaultModelExpandDepth: 3,
+        // Show how long each Try it out request took.
+        displayRequestDuration: true,
+        // Keep the Authorize token across reloads (the test site's sign-in cookie expires after 12 hours).
+        persistAuthorization: true,
+      },
+    })
   }
 
   app.addHook('onRoute', (route) => {
