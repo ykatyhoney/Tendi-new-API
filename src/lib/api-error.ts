@@ -1,3 +1,5 @@
+import { Type } from '@fastify/type-provider-typebox'
+
 export class ApiError extends Error {
   readonly statusCode: number
   readonly code: string
@@ -11,6 +13,18 @@ export class ApiError extends Error {
     this.details = details
   }
 }
+
+/** The one error shape. Published in OpenAPI as the ApiError component and used for every 4xx and 5xx. */
+export const apiErrorSchema = Type.Object(
+  {
+    statusCode: Type.Integer(),
+    code: Type.String({ description: 'Stable machine-readable code, such as VALIDATION or ALREADY_LINKED.' }),
+    error: Type.String(),
+    message: Type.String(),
+    details: Type.Optional(Type.Unknown({ description: 'Field paths for VALIDATION; ids or a constraint name for some 409s.' })),
+  },
+  { $id: 'ApiError', additionalProperties: false },
+)
 
 export interface ApiErrorBody {
   statusCode: number

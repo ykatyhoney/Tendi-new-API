@@ -1,8 +1,9 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise'
+import type { RowDataPacket } from 'mysql2/promise'
 import { likeContains } from '../../../lib/like.js'
+import type { AddressType, EmailType, PhoneChannel, PhoneType, RecordStatus } from '../schemas/common.js'
 import { phoneSearchKey } from '../../../lib/phone.js'
 import { PHONE_LOOKUP_SQL } from './phones.js'
-import { placeholders, rows, unionOf, type SearchMatch } from './query.js'
+import { placeholders, rows, unionOf, type SearchMatch, type Sql } from './query.js'
 
 export interface ContactRow extends RowDataPacket {
   id: number
@@ -19,9 +20,9 @@ export interface PhoneRow extends RowDataPacket {
   id: number
   contactId: number
   phone: string
-  type: 'mobile' | 'home' | 'work' | 'other'
+  type: PhoneType
   typeLabel: string | null
-  channel: 'none' | 'sms' | 'voice' | 'both'
+  channel: PhoneChannel
   isPrimary: number
   sortOrder: number
 }
@@ -30,7 +31,7 @@ export interface EmailRow extends RowDataPacket {
   id: number
   contactId: number
   email: string
-  type: 'personal' | 'work' | 'other'
+  type: EmailType
   typeLabel: string | null
   isPrimary: number
   sortOrder: number
@@ -39,7 +40,7 @@ export interface EmailRow extends RowDataPacket {
 export interface AddressRow extends RowDataPacket {
   id: number
   contactId: number
-  type: 'home' | 'work' | 'billing' | 'other'
+  type: AddressType
   typeLabel: string | null
   line1: string
   line2: string
@@ -53,7 +54,7 @@ export interface HouseholdRow extends RowDataPacket {
   contactId: number
   familyId: number
   familyName: string
-  familyStatus: 'active' | 'trash'
+  familyStatus: RecordStatus
   memberId: number
   relationship: string
   relationshipLabel: string
@@ -83,7 +84,7 @@ function contactMatch(query: string): SearchMatch | null {
 }
 
 export async function pageContacts(
-  db: Pool,
+  db: Sql,
   query: string,
   page: number,
   pageSize: number,
@@ -109,7 +110,7 @@ export async function pageContacts(
   return { total: Number(totals[0]?.['total'] ?? 0), contacts }
 }
 
-export async function findActiveContact(db: Pool, id: number): Promise<ContactRow | null> {
+export async function findActiveContact(db: Sql, id: number): Promise<ContactRow | null> {
   const found = await rows<ContactRow>(
     db,
     `SELECT id, fname, lname, legacy_full_name AS legacyFullName, hebrew_name AS hebrewName,
@@ -121,7 +122,7 @@ export async function findActiveContact(db: Pool, id: number): Promise<ContactRo
   return found[0] ?? null
 }
 
-export async function listPhones(db: Pool, contactIds: readonly number[]): Promise<PhoneRow[]> {
+export async function listPhones(db: Sql, contactIds: readonly number[]): Promise<PhoneRow[]> {
   if (contactIds.length === 0) {
     return []
   }
@@ -136,7 +137,7 @@ export async function listPhones(db: Pool, contactIds: readonly number[]): Promi
   )
 }
 
-export async function listEmails(db: Pool, contactIds: readonly number[]): Promise<EmailRow[]> {
+export async function listEmails(db: Sql, contactIds: readonly number[]): Promise<EmailRow[]> {
   if (contactIds.length === 0) {
     return []
   }
@@ -151,7 +152,7 @@ export async function listEmails(db: Pool, contactIds: readonly number[]): Promi
   )
 }
 
-export async function listAddresses(db: Pool, contactIds: readonly number[]): Promise<AddressRow[]> {
+export async function listAddresses(db: Sql, contactIds: readonly number[]): Promise<AddressRow[]> {
   if (contactIds.length === 0) {
     return []
   }
@@ -166,7 +167,7 @@ export async function listAddresses(db: Pool, contactIds: readonly number[]): Pr
   )
 }
 
-export async function listHouseholds(db: Pool, contactIds: readonly number[]): Promise<HouseholdRow[]> {
+export async function listHouseholds(db: Sql, contactIds: readonly number[]): Promise<HouseholdRow[]> {
   if (contactIds.length === 0) {
     return []
   }

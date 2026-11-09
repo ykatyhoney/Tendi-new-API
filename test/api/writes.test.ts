@@ -303,8 +303,8 @@ describe('family writes', () => {
       headers: auth,
       payload: { phones: [{ phone: '2125550101', isPrimary: false }] },
     })
-    expect(noPrimary.statusCode).toBe(409)
-    expect(noPrimary.json().code).toBe('SECOND_PRIMARY')
+    expect(noPrimary.statusCode).toBe(400)
+    expect(noPrimary.json().code).toBe('PRIMARY_REQUIRED')
 
     const labeled = await app.inject({
       method: 'PUT',

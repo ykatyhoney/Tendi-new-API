@@ -27,8 +27,28 @@ const healthResponse = Type.Object(
 /** A passed schema check is trusted for this long. The pool is still pinged on every call. */
 const SCHEMA_CHECK_TTL_MS = 5 * 60 * 1000
 
+const liveResponse = Type.Object({ status: Type.Literal('ok') }, { additionalProperties: false })
+
+/**
+ * /health/live: the process is up. It never touches the database, so a restart policy does not
+ * restart a healthy process during a database outage.
+ * /health: ready to serve. Pings the pool and checks the family schema; 503 when not ready.
+ */
 const healthRoutes: FastifyPluginAsync = async (app) => {
   let schemaCheckedAt: number | undefined
+
+  app.get(
+    '/api/v1/health/live',
+    {
+      schema: {
+        operationId: 'getLiveness',
+        tags: ['family'],
+        security: [],
+        response: { 200: liveResponse },
+      },
+    },
+    async () => ({ status: 'ok' as const }),
+  )
 
   app.get(
     '/api/v1/health',

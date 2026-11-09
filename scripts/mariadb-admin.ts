@@ -7,6 +7,10 @@ import mysql from 'mysql2'
 import { assertAllowedDatabase, assertLocalHost } from '../src/lib/database-target.js'
 import { familyApiGrantStatements } from '../src/lib/family-api-grants.js'
 
+/** The Windows installer's path on Windows; elsewhere the client on PATH. MARIADB_BIN overrides both. */
+const DEFAULT_MARIADB_BIN =
+  process.platform === 'win32' ? 'C:\\Program Files\\MariaDB 10.11\\bin\\mariadb.exe' : 'mariadb'
+
 export interface AdminConfig {
   host: string
   port: number
@@ -24,7 +28,7 @@ export function loadAdminConfig(): AdminConfig {
   const user = env.DB_ADMIN_USER || ''
   const password = env.DB_ADMIN_PASSWORD || ''
   const familyPassword = env.FAMILY_DB_PASSWORD || ''
-  const clientPath = env.MARIADB_BIN || 'C:\\Program Files\\MariaDB 10.11\\bin\\mariadb.exe'
+  const clientPath = env.MARIADB_BIN || DEFAULT_MARIADB_BIN
   assertLocalHost(host)
   if (!user) {
     throw new Error('Set DB_ADMIN_USER in .env. Reset and schema checks use this account, not family_api.')

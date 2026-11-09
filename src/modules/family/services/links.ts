@@ -135,7 +135,7 @@ export async function replaceRights(
   childId: number,
   body: ReplaceRightsBody,
 ): Promise<RightsResult> {
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     await requireActiveFamily(connection, familyId)
     await requireChildOf(connection, familyId, childId)
@@ -213,10 +213,9 @@ export async function replaceRights(
     }
     await writeAudit(connection, staffId, changes)
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { affected }
+    const rights = await readRights(connection, familyId, childId)
+    return { familyId, childId, rights, affected_child_ids: affected }
   })
-  const rights = await readRights(pool, familyId, childId)
-  return { familyId, childId, rights, affected_child_ids: saved.affected }
 }
 
 async function lockChildForLink(connection: PoolConnection, familyId: number, childId: number): Promise<ChildLock> {
@@ -372,9 +371,9 @@ function auditRights(row: RightsValues): Record<string, string | null> {
   }
 }
 
-async function readRights(pool: Pool, familyId: number, childId: number): Promise<RightsResult['rights']> {
+async function readRights(connection: PoolConnection, familyId: number, childId: number): Promise<RightsResult['rights']> {
   const found = await rows<RightsLock>(
-    pool,
+    connection,
     `SELECT r.id, r.member_id AS memberId, r.receives_notifications AS receivesNotifications,
             r.notify_method AS notifyMethod, r.may_collect AS mayCollect, r.collect_from AS collectFrom,
             r.collect_to AS collectTo, r.is_emergency AS isEmergency, r.is_payment_responsible AS isPaymentResponsible

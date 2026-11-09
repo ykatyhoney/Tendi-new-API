@@ -1,15 +1,21 @@
 import { Type } from '@fastify/type-provider-typebox'
-import { familySearchQuery } from './family.js'
+import {
+  address,
+  addressType,
+  email,
+  emailType,
+  phone,
+  phoneChannel,
+  phoneType,
+  recordStatus,
+  searchQuery,
+  sortOrder,
+} from './common.js'
 
 const contactPhone = Type.Object(
   {
     phone: Type.String(),
-    type: Type.Union([
-      Type.Literal('mobile'),
-      Type.Literal('home'),
-      Type.Literal('work'),
-      Type.Literal('other'),
-    ]),
+    type: phoneType,
     isPrimary: Type.Boolean(),
   },
   { additionalProperties: false },
@@ -19,7 +25,7 @@ const household = Type.Object(
   {
     familyId: Type.Integer(),
     familyName: Type.String(),
-    familyStatus: Type.Union([Type.Literal('active'), Type.Literal('trash')]),
+    familyStatus: recordStatus,
     memberId: Type.Integer(),
     relationship: Type.String(),
     relationshipLabel: Type.String(),
@@ -46,7 +52,7 @@ const contactSummary = Type.Object(
   { additionalProperties: false },
 )
 
-export const contactSearchQuery = familySearchQuery
+export const contactSearchQuery = searchQuery
 
 export const contactPage = Type.Object(
   {
@@ -68,64 +74,9 @@ export const contactDetail = Type.Object(
     occupation: Type.String(),
     employer: Type.String(),
     note: Type.Union([Type.String(), Type.Null()]),
-    phones: Type.Array(
-      Type.Object(
-        {
-          id: Type.Integer(),
-          phone: Type.String(),
-          type: Type.Union([
-            Type.Literal('mobile'),
-            Type.Literal('home'),
-            Type.Literal('work'),
-            Type.Literal('other'),
-          ]),
-          typeLabel: Type.Union([Type.String(), Type.Null()]),
-          channel: Type.Union([
-            Type.Literal('none'),
-            Type.Literal('sms'),
-            Type.Literal('voice'),
-            Type.Literal('both'),
-          ]),
-          isPrimary: Type.Boolean(),
-          sortOrder: Type.Integer(),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-    emails: Type.Array(
-      Type.Object(
-        {
-          id: Type.Integer(),
-          email: Type.String(),
-          type: Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')]),
-          typeLabel: Type.Union([Type.String(), Type.Null()]),
-          isPrimary: Type.Boolean(),
-          sortOrder: Type.Integer(),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-    addresses: Type.Array(
-      Type.Object(
-        {
-          id: Type.Integer(),
-          type: Type.Union([
-            Type.Literal('home'),
-            Type.Literal('work'),
-            Type.Literal('billing'),
-            Type.Literal('other'),
-          ]),
-          typeLabel: Type.Union([Type.String(), Type.Null()]),
-          line1: Type.String(),
-          line2: Type.String(),
-          city: Type.String(),
-          state: Type.String(),
-          zip: Type.String(),
-          isPrimary: Type.Boolean(),
-        },
-        { additionalProperties: false },
-      ),
-    ),
+    phones: Type.Array(phone),
+    emails: Type.Array(email),
+    addresses: Type.Array(address),
     households: Type.Array(household),
   },
   { additionalProperties: false },
@@ -152,15 +103,11 @@ const phoneInput = Type.Object(
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
     phone: Type.String({ minLength: 1, maxLength: 255 }),
-    type: Type.Optional(
-      Type.Union([Type.Literal('mobile'), Type.Literal('home'), Type.Literal('work'), Type.Literal('other')]),
-    ),
+    type: Type.Optional(phoneType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
-    channel: Type.Optional(
-      Type.Union([Type.Literal('none'), Type.Literal('sms'), Type.Literal('voice'), Type.Literal('both')]),
-    ),
+    channel: Type.Optional(phoneChannel),
     isPrimary: Type.Optional(Type.Boolean()),
-    sortOrder: Type.Optional(Type.Integer()),
+    sortOrder: Type.Optional(sortOrder),
   },
   { additionalProperties: false },
 )
@@ -170,10 +117,10 @@ const emailInput = Type.Object(
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
     email: Type.String({ minLength: 1, maxLength: 255 }),
-    type: Type.Optional(Type.Union([Type.Literal('personal'), Type.Literal('work'), Type.Literal('other')])),
+    type: Type.Optional(emailType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     isPrimary: Type.Optional(Type.Boolean()),
-    sortOrder: Type.Optional(Type.Integer()),
+    sortOrder: Type.Optional(sortOrder),
   },
   { additionalProperties: false },
 )
@@ -182,9 +129,7 @@ const addressInput = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
-    type: Type.Optional(
-      Type.Union([Type.Literal('home'), Type.Literal('work'), Type.Literal('billing'), Type.Literal('other')]),
-    ),
+    type: Type.Optional(addressType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     line1: Type.Optional(Type.String({ maxLength: 255 })),
     line2: Type.Optional(Type.String({ maxLength: 255 })),

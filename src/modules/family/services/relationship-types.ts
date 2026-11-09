@@ -1,7 +1,7 @@
 import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise'
 import { ApiError } from '../../../lib/api-error.js'
 import { withStaffTransaction } from '../../../lib/with-transaction.js'
-import { rows } from '../repositories/query.js'
+import { rows, type Sql } from '../repositories/query.js'
 import { listActiveRelationshipTypes } from '../repositories/relationship-types.js'
 import type {
   CreateRelationshipTypeBody,
@@ -24,7 +24,7 @@ interface StoredType extends RowDataPacket {
   status: 'active' | 'inactive'
 }
 
-export async function listRelationshipTypes(db: Pool): Promise<RelationshipTypeList> {
+export async function listRelationshipTypes(db: Sql): Promise<RelationshipTypeList> {
   const types = await listActiveRelationshipTypes(db)
   return {
     items: types.map((row) => ({
@@ -43,17 +43,26 @@ export async function createRelationshipType(
   staffId: number,
   body: CreateRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
-  await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     const existing = await lockType(connection, body.code)
     if (existing !== null) {
-      throw new ApiError(409, 'DUPLICATE_CODE', 'That relationship code already exists.')
+      throw duplicateCode()
     }
-    await connection.query(
-      `INSERT INTO relationship_types
-         (code, label, parent_slot, slot_rank, sort_order, status, created_at, updated_at, created_by, updated_by)
-       VALUES (?, ?, NULL, NULL, ?, 'active', UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?, ?)`,
-      [body.code, body.label, body.sortOrder, staffId, staffId],
-    )
+    try {
+      await connection.query(
+        `INSERT INTO relationship_types
+           (code, label, parent_slot, slot_rank, sort_order, status, created_at, updated_at, created_by, updated_by)
+         VALUES (?, ?, NULL, NULL, ?, 'active', UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?, ?)`,
+        [body.code, body.label, body.sortOrder, staffId, staffId],
+      )
+    } catch (error) {
+      // FOR UPDATE on a missing row takes no lock at READ COMMITTED, so two creates of one code can both
+      // pass the check above. The primary key stops the second one.
+      if (isDuplicateKey(error)) {
+        throw duplicateCode()
+      }
+      throw error
+    }
     await writeAudit(
       connection,
       staffId,
@@ -66,8 +75,8 @@ export async function createRelationshipType(
         body.code,
       ),
     )
+    return finishType(connection, body.code)
   })
-  return finishType(pool, body.code)
 }
 
 export async function patchRelationshipType(
@@ -77,7 +86,7 @@ export async function patchRelationshipType(
   body: PatchRelationshipTypeBody,
 ): Promise<RelationshipTypeResult> {
   requireChange(body.label !== undefined || body.sortOrder !== undefined || body.status !== undefined)
-  await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     const current = await lockType(connection, code)
     if (current === null) {
       throw new ApiError(404, 'NOT_FOUND', 'Relationship type not found')
@@ -105,8 +114,8 @@ export async function patchRelationshipType(
       )
       await writeAudit(connection, staffId, changes)
     }
+    return finishType(connection, code)
   })
-  return finishType(pool, code)
 }
 
 function assertUnlocked(current: StoredType, body: PatchRelationshipTypeBody): void {
@@ -144,9 +153,9 @@ async function lockType(connection: PoolConnection, code: string): Promise<Store
   }
 }
 
-async function finishType(pool: Pool, code: string): Promise<RelationshipTypeResult> {
+async function finishType(connection: PoolConnection, code: string): Promise<RelationshipTypeResult> {
   const found = await rows<StoredType>(
-    pool,
+    connection,
     `SELECT code, label, parent_slot AS parentSlot, slot_rank AS slotRank, sort_order AS sortOrder, status
      FROM relationship_types WHERE code = ?`,
     [code],
@@ -166,6 +175,14 @@ async function finishType(pool: Pool, code: string): Promise<RelationshipTypeRes
     },
     affected_child_ids: [],
   }
+}
+
+function duplicateCode(): ApiError {
+  return new ApiError(409, 'DUPLICATE_CODE', 'That relationship code already exists.')
+}
+
+function isDuplicateKey(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'errno' in error && Number(error.errno) === 1062
 }
 
 function parentSlot(value: string | null): 'father' | 'mother' | null {

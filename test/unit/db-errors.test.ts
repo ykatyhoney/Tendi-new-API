@@ -60,6 +60,25 @@ describe('MariaDB error mapping', () => {
     expect(JSON.stringify(body)).not.toContain('INSERT')
   })
 
+  it('maps a value the column refuses to 400 VALIDATION with the column, not the value', () => {
+    const cases: [number, string, string][] = [
+      [1264, "Out of range value for column 'sort_order' at row 1", 'sort_order'],
+      [1406, "Data too long for column 'household_phone' at row 1", 'household_phone'],
+      [1048, "Column 'fname' cannot be null", 'fname'],
+      [
+        1366,
+        "Incorrect string value: '\\xF0\\x9F\\x98\\x80' for column `tendi_family_dev`.`family_contacts`.`note` at row 1",
+        'note',
+      ],
+    ]
+    for (const [errno, message, column] of cases) {
+      const body = mapDatabaseError(databaseError(errno, message))
+      expect(body).toMatchObject({ statusCode: 400, code: 'VALIDATION', details: [{ path: `/${column}` }] })
+      expect(JSON.stringify(body)).not.toContain('xF0')
+      expect(JSON.stringify(body)).not.toContain('secret-row')
+    }
+  })
+
   it('leaves an unrecognized duplicate key unmapped', () => {
     expect(mapDatabaseError(databaseError(1062, "Duplicate entry 'a' for key 'uq_admin_token'"))).toBeNull()
   })

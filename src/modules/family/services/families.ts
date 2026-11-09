@@ -1,4 +1,3 @@
-import type { Pool } from 'mysql2/promise'
 import {
   findActiveFamily,
   findFamily,
@@ -6,12 +5,21 @@ import {
   pageFamilies,
   type MemberRow,
 } from '../repositories/families.js'
-import { listAddresses, listEmails, listPhones } from '../repositories/contacts.js'
-import { listChildren, listRights } from '../repositories/children.js'
+import {
+  listAddresses,
+  listEmails,
+  listPhones,
+  type AddressRow,
+  type EmailRow,
+  type PhoneRow,
+} from '../repositories/contacts.js'
+import { listChildren, listRights, type RightsRow } from '../repositories/children.js'
+import type { Sql } from '../repositories/query.js'
 import type { FamilyDetail, FamilyPage, FamilySearchQuery } from '../schemas/family.js'
+import { toAddress, toEmail, toPhone, toRights } from './mappers.js'
 import { asBoolean, asNumber, asNullableString, asString, contactName, groupBy } from './values.js'
 
-export async function searchFamilies(db: Pool, query: FamilySearchQuery): Promise<FamilyPage> {
+export async function searchFamilies(db: Sql, query: FamilySearchQuery): Promise<FamilyPage> {
   const page = await pageFamilies(db, query.q ?? '', query.page, query.pageSize)
   const familyIds = page.families.map((family) => asNumber(family.id))
   const [members, children] = await Promise.all([
@@ -49,7 +57,7 @@ export async function searchFamilies(db: Pool, query: FamilySearchQuery): Promis
   }
 }
 
-export async function getFamily(db: Pool, id: number, includeTrash = false): Promise<FamilyDetail | null> {
+export async function getFamily(db: Sql, id: number, includeTrash = false): Promise<FamilyDetail | null> {
   const family = includeTrash ? await findFamily(db, id) : await findActiveFamily(db, id)
   if (family === null) {
     return null
@@ -85,10 +93,10 @@ export async function getFamily(db: Pool, id: number, includeTrash = false): Pro
 
 function toMember(
   member: MemberRow,
-  phonesByContact: Map<number, { id: number; phone: string; type: 'mobile' | 'home' | 'work' | 'other'; typeLabel: string | null; channel: 'none' | 'sms' | 'voice' | 'both'; isPrimary: number; sortOrder: number }[]>,
-  emailsByContact: Map<number, { id: number; email: string; type: 'personal' | 'work' | 'other'; typeLabel: string | null; isPrimary: number; sortOrder: number }[]>,
-  addressesByContact: Map<number, { id: number; type: 'home' | 'work' | 'billing' | 'other'; typeLabel: string | null; line1: string; line2: string; city: string; state: string; zip: string; isPrimary: number }[]>,
-  rightsByMember: Map<number, { id: number; childId: number; receivesNotifications: number; notifyMethod: 'sms' | 'voice' | 'both'; mayCollect: number; collectFrom: string | null; collectTo: string | null; isEmergency: number; isPaymentResponsible: number }[]>,
+  phonesByContact: Map<number, PhoneRow[]>,
+  emailsByContact: Map<number, EmailRow[]>,
+  addressesByContact: Map<number, AddressRow[]>,
+  rightsByMember: Map<number, RightsRow[]>,
 ): FamilyDetail['members'][number] {
   const contactId = asNumber(member.contactId)
   return {
@@ -106,45 +114,10 @@ function toMember(
       occupation: asString(member.occupation),
       employer: asString(member.employer),
       note: asNullableString(member.note),
-      phones: (phonesByContact.get(contactId) ?? []).map((row) => ({
-        id: asNumber(row.id),
-        phone: asString(row.phone),
-        type: row.type,
-        typeLabel: asNullableString(row.typeLabel),
-        channel: row.channel,
-        isPrimary: asBoolean(row.isPrimary),
-        sortOrder: asNumber(row.sortOrder),
-      })),
-      emails: (emailsByContact.get(contactId) ?? []).map((row) => ({
-        id: asNumber(row.id),
-        email: asString(row.email),
-        type: row.type,
-        typeLabel: asNullableString(row.typeLabel),
-        isPrimary: asBoolean(row.isPrimary),
-        sortOrder: asNumber(row.sortOrder),
-      })),
-      addresses: (addressesByContact.get(contactId) ?? []).map((row) => ({
-        id: asNumber(row.id),
-        type: row.type,
-        typeLabel: asNullableString(row.typeLabel),
-        line1: asString(row.line1),
-        line2: asString(row.line2),
-        city: asString(row.city),
-        state: asString(row.state),
-        zip: asString(row.zip),
-        isPrimary: asBoolean(row.isPrimary),
-      })),
+      phones: (phonesByContact.get(contactId) ?? []).map(toPhone),
+      emails: (emailsByContact.get(contactId) ?? []).map(toEmail),
+      addresses: (addressesByContact.get(contactId) ?? []).map(toAddress),
     },
-    rights: (rightsByMember.get(asNumber(member.memberId)) ?? []).map((row) => ({
-      id: asNumber(row.id),
-      childId: asNumber(row.childId),
-      receivesNotifications: asBoolean(row.receivesNotifications),
-      notifyMethod: row.notifyMethod,
-      mayCollect: asBoolean(row.mayCollect),
-      collectFrom: asNullableString(row.collectFrom),
-      collectTo: asNullableString(row.collectTo),
-      isEmergency: asBoolean(row.isEmergency),
-      isPaymentResponsible: asBoolean(row.isPaymentResponsible),
-    })),
+    rights: (rightsByMember.get(asNumber(member.memberId)) ?? []).map(toRights),
   }
 }

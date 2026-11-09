@@ -1,4 +1,5 @@
 import { Type } from '@fastify/type-provider-typebox'
+import { notifyMethod } from './common.js'
 
 export const familyChildParams = Type.Object({
   id: Type.Integer({ minimum: 1 }),
@@ -46,8 +47,6 @@ export const unlinkResult = Type.Object(
   },
   { additionalProperties: false },
 )
-
-const notifyMethod = Type.Union([Type.Literal('sms'), Type.Literal('voice'), Type.Literal('both')])
 
 const rightsInput = Type.Object(
   {

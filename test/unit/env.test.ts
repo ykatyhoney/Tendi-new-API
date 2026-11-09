@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadConfig } from '../../src/config/env.js'
+import { configWarnings, loadConfig } from '../../src/config/env.js'
 
 const isolated = { dotenv: false, env: false } as const
 const productionSettings = { FAMILY_DB_PASSWORD: 'secret', CORS_ORIGIN: 'https://tendi.example' }
@@ -97,5 +97,22 @@ describe('loadConfig', () => {
     await expect(
       loadConfig({ ...isolated, data: { ALLOWED_STAFF_TYPES: ' , ' } }),
     ).rejects.toThrow(/ALLOWED_STAFF_TYPES/)
+  })
+})
+
+describe('configWarnings', () => {
+  it('warns when a relationship-admin type cannot get past staff auth', async () => {
+    const config = await loadConfig({ ...isolated, data: {} })
+    const warnings = configWarnings(config)
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('superadmin')
+  })
+
+  it('is quiet when every relationship-admin type is a staff type', async () => {
+    const config = await loadConfig({
+      ...isolated,
+      data: { ALLOWED_STAFF_TYPES: 'admin,office,superadmin', RELATIONSHIP_ADMIN_TYPES: 'admin,superadmin' },
+    })
+    expect(configWarnings(config)).toEqual([])
   })
 })

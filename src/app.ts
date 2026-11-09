@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { type TypeBoxTypeProvider } from '@fastify/type-provider-typebox'
 import Fastify from 'fastify'
 import pino from 'pino'
-import type { AppConfig } from './config/env.js'
+import { configWarnings, type AppConfig } from './config/env.js'
 import { ajvValidatorCompiler } from './lib/validator.js'
 import familyModule, { type FamilyModuleOptions } from './modules/family/plugin.js'
 import authPlugin from './plugins/auth.js'
@@ -61,6 +61,10 @@ export async function buildApp(options: BuildAppOptions) {
           loggerInstance: pino({
             level: config.logLevel,
             redact: REDACT_PATHS,
+            // Readable lines on a developer's terminal; JSON everywhere else. pino-pretty is a dev dependency.
+            ...(config.nodeEnv === 'development'
+              ? { transport: { target: 'pino-pretty', options: { translateTime: 'SYS:HH:MM:ss', ignore: 'pid,hostname' } } }
+              : {}),
           }),
         }),
   })
@@ -68,6 +72,9 @@ export async function buildApp(options: BuildAppOptions) {
     .withTypeProvider<TypeBoxTypeProvider>()
 
   app.decorate('config', config)
+  for (const warning of configWarnings(config)) {
+    app.log.warn(warning)
+  }
   await app.register(jsonBodyPlugin)
   await app.register(errorsPlugin)
   await app.register(securityPlugin)

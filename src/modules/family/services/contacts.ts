@@ -1,4 +1,3 @@
-import type { Pool } from 'mysql2/promise'
 import {
   findActiveContact,
   listAddresses,
@@ -7,11 +6,13 @@ import {
   listPhones,
   pageContacts,
 } from '../repositories/contacts.js'
+import type { Sql } from '../repositories/query.js'
 import type { ContactDetail, ContactPage } from '../schemas/contact.js'
 import type { FamilySearchQuery } from '../schemas/family.js'
+import { toAddress, toEmail, toPhone } from './mappers.js'
 import { asBoolean, asNumber, asNullableString, asString, groupBy } from './values.js'
 
-export async function searchContacts(db: Pool, query: FamilySearchQuery): Promise<ContactPage> {
+export async function searchContacts(db: Sql, query: FamilySearchQuery): Promise<ContactPage> {
   const page = await pageContacts(db, query.q ?? '', query.page, query.pageSize)
   const contactIds = page.contacts.map((contact) => asNumber(contact.id))
   const [phones, households] = await Promise.all([
@@ -45,7 +46,7 @@ export async function searchContacts(db: Pool, query: FamilySearchQuery): Promis
   }
 }
 
-export async function getContact(db: Pool, id: number): Promise<ContactDetail | null> {
+export async function getContact(db: Sql, id: number): Promise<ContactDetail | null> {
   const contact = await findActiveContact(db, id)
   if (contact === null) {
     return null
@@ -65,34 +66,9 @@ export async function getContact(db: Pool, id: number): Promise<ContactDetail | 
     occupation: asString(contact.occupation),
     employer: asString(contact.employer),
     note: asNullableString(contact.note),
-    phones: phones.map((row) => ({
-      id: asNumber(row.id),
-      phone: asString(row.phone),
-      type: row.type,
-      typeLabel: asNullableString(row.typeLabel),
-      channel: row.channel,
-      isPrimary: asBoolean(row.isPrimary),
-      sortOrder: asNumber(row.sortOrder),
-    })),
-    emails: emails.map((row) => ({
-      id: asNumber(row.id),
-      email: asString(row.email),
-      type: row.type,
-      typeLabel: asNullableString(row.typeLabel),
-      isPrimary: asBoolean(row.isPrimary),
-      sortOrder: asNumber(row.sortOrder),
-    })),
-    addresses: addresses.map((row) => ({
-      id: asNumber(row.id),
-      type: row.type,
-      typeLabel: asNullableString(row.typeLabel),
-      line1: asString(row.line1),
-      line2: asString(row.line2),
-      city: asString(row.city),
-      state: asString(row.state),
-      zip: asString(row.zip),
-      isPrimary: asBoolean(row.isPrimary),
-    })),
+    phones: phones.map(toPhone),
+    emails: emails.map(toEmail),
+    addresses: addresses.map(toAddress),
     households: households.map((row) => ({
       familyId: asNumber(row.familyId),
       familyName: asString(row.familyName),

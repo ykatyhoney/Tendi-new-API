@@ -9,11 +9,12 @@ import type {
   PatchFamilyBody,
   PatchMemberBody,
 } from '../../schemas/family.js'
+import type { NewContact } from '../../schemas/common.js'
 import { getFamily } from '../families.js'
 import { affectedChildIdsForFamily } from '../mirror/affected.js'
 import { writeMirror } from '../mirror/write.js'
 import { auditValue, columnChanges, familyIdsForContact, insertId, lockFamilies, writeAudit } from './audit.js'
-import { legacyFullName, requireChange } from './rules.js'
+import { contactNames, legacyFullName, requireChange } from './rules.js'
 
 interface FamilyRecord extends RowDataPacket {
   id: number
@@ -38,7 +39,7 @@ interface ContactRecord extends RowDataPacket {
 
 export async function createFamily(pool: Pool, staffId: number, body: CreateFamilyBody): Promise<FamilyWriteResult> {
   const householdPhone = body.householdPhone ?? ''
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     const familyId = await insertId(
       connection,
       `INSERT INTO families (name, household_phone, status, created_at, updated_at, created_by, updated_by)
@@ -59,9 +60,8 @@ export async function createFamily(pool: Pool, staffId: number, body: CreateFami
       { table: 'families', id: familyId, action: 'insert', column: 'status', oldValue: null, newValue: 'active' },
     ])
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { familyId, affected }
+    return finishFamily(connection, familyId, affected)
   })
-  return finishFamily(pool, saved.familyId, saved.affected)
 }
 
 export async function patchFamily(
@@ -71,7 +71,7 @@ export async function patchFamily(
   body: PatchFamilyBody,
 ): Promise<FamilyWriteResult> {
   requireChange(body.name !== undefined || body.householdPhone !== undefined || body.status !== undefined)
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const current = await loadFamily(connection, familyId)
     if (body.status === 'trash' && current.status !== 'trash') {
@@ -103,9 +103,8 @@ export async function patchFamily(
       await writeAudit(connection, staffId, changes)
     }
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { affected }
+    return finishFamily(connection, familyId, affected)
   })
-  return finishFamily(pool, familyId, saved.affected)
 }
 
 export async function createMember(
@@ -114,7 +113,7 @@ export async function createMember(
   familyId: number,
   body: CreateMemberBody,
 ): Promise<FamilyWriteResult> {
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -129,9 +128,8 @@ export async function createMember(
       await clearOtherPrimaries(connection, staffId, familyId, memberId)
     }
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { affected }
+    return finishFamily(connection, familyId, affected)
   })
-  return finishFamily(pool, familyId, saved.affected)
 }
 
 export async function patchMember(
@@ -142,7 +140,7 @@ export async function patchMember(
   body: PatchMemberBody,
 ): Promise<FamilyWriteResult> {
   requireChange(body.relationship !== undefined || body.isPrimary !== undefined || body.sortOrder !== undefined)
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -179,9 +177,8 @@ export async function patchMember(
       await writeAudit(connection, staffId, changes)
     }
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { affected }
+    return finishFamily(connection, familyId, affected)
   })
-  return finishFamily(pool, familyId, saved.affected)
 }
 
 export async function deleteMember(
@@ -190,7 +187,7 @@ export async function deleteMember(
   familyId: number,
   memberId: number,
 ): Promise<FamilyWriteResult> {
-  const saved = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockFamilies(connection, [familyId])
     const family = await loadFamily(connection, familyId)
     if (family.status !== 'active') {
@@ -221,13 +218,13 @@ export async function deleteMember(
         : []),
     ])
     const affected = await writeMirror(connection, await affectedChildIdsForFamily(connection, familyId))
-    return { affected }
+    return finishFamily(connection, familyId, affected)
   })
-  return finishFamily(pool, familyId, saved.affected)
 }
 
-async function finishFamily(pool: Pool, familyId: number, affected: number[]): Promise<FamilyWriteResult> {
-  const family = await getFamily(pool, familyId, true)
+/** Read inside the save's transaction, so the response is what this save committed, or nothing is committed. */
+async function finishFamily(connection: PoolConnection, familyId: number, affected: number[]): Promise<FamilyWriteResult> {
+  const family = await getFamily(connection, familyId, true)
   if (family === null) {
     throw new ApiError(500, 'INTERNAL', 'Family could not be read after it was saved.')
   }
@@ -299,10 +296,9 @@ async function lockContact(connection: PoolConnection, contactId: number): Promi
 async function insertContact(
   connection: PoolConnection,
   staffId: number,
-  contact: { fname: string; lname: string; hebrewName?: string; occupation?: string; employer?: string; note?: string | null },
+  contact: NewContact,
 ): Promise<number> {
-  const fname = contact.fname
-  const lname = contact.lname
+  const { fname, lname } = contactNames(contact.fname, contact.lname)
   const hebrewName = contact.hebrewName ?? ''
   const occupation = contact.occupation ?? ''
   const employer = contact.employer ?? ''

@@ -18,11 +18,20 @@ import { tokenHash } from '../lib/token-hash.js'
 
 const REDIS_NAMESPACE = 'family-api-rate-limit:'
 
+/** Every method a family route uses. */
+export const CORS_METHODS = ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] as const
+
 const securityPlugin: FastifyPluginAsync = async (app) => {
   const { perMinute, redisUrl } = app.config.rateLimit
   await app.register(helmet)
   await app.register(cors, {
     origin: [...app.config.corsOrigins],
+    // @fastify/cors allows only GET, HEAD, and POST unless told otherwise, and browsers then
+    // refuse every PATCH, PUT, and DELETE from Tendi-new after the preflight.
+    methods: [...CORS_METHODS],
+    allowedHeaders: ['authorization', 'content-type', 'x-request-id'],
+    exposedHeaders: ['x-request-id', 'retry-after'],
+    maxAge: 600,
   })
 
   const redis = redisUrl === null ? undefined : sharedRedis(redisUrl)

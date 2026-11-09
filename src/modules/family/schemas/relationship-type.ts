@@ -1,4 +1,5 @@
 import { Type } from '@fastify/type-provider-typebox'
+import { sortOrder } from './common.js'
 
 const relationshipType = Type.Object(
   {
@@ -39,7 +40,7 @@ export const createRelationshipTypeBody = Type.Object(
   {
     code: Type.String({ minLength: 1, maxLength: 32, pattern: '^[a-z_]+$' }),
     label: Type.String({ minLength: 1, maxLength: 64 }),
-    sortOrder: Type.Integer(),
+    sortOrder,
   },
   { additionalProperties: false },
 )
@@ -47,7 +48,7 @@ export const createRelationshipTypeBody = Type.Object(
 export const patchRelationshipTypeBody = Type.Object(
   {
     label: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
-    sortOrder: Type.Optional(Type.Integer()),
+    sortOrder: Type.Optional(sortOrder),
     status: Type.Optional(Type.Union([Type.Literal('active'), Type.Literal('inactive')])),
   },
   { additionalProperties: false },

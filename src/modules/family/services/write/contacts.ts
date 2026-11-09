@@ -15,7 +15,7 @@ import { affectedChildIdsForContact } from '../mirror/affected.js'
 import { writeMirror } from '../mirror/write.js'
 import { auditValue, columnChanges, insertId, writeAudit, type AuditChange } from './audit.js'
 import { lockContactFamilies } from './families.js'
-import { assertOnePrimary, legacyFullName, requireChange, typeLabelFor } from './rules.js'
+import { assertOnePrimary, contactNames, legacyFullName, requireChange, typeLabelFor } from './rules.js'
 
 interface ContactRecord extends RowDataPacket {
   id: number
@@ -43,17 +43,17 @@ export async function patchContact(
       body.employer !== undefined ||
       body.note !== undefined,
   )
-  const affected = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     const current = await lockActiveContact(connection, contactId)
-    const fname = body.fname ?? current.fname
-    const lname = body.lname ?? current.lname
+    const namesChanged = body.fname !== undefined || body.lname !== undefined
+    // Stored names are kept as they are unless this save changes one of them.
+    const { fname, lname } = namesChanged
+      ? contactNames(body.fname ?? current.fname, body.lname ?? current.lname)
+      : { fname: current.fname, lname: current.lname }
     const next = {
       fname,
       lname,
-      legacy_full_name:
-        body.fname !== undefined || body.lname !== undefined
-          ? legacyFullName(fname, lname)
-          : current.legacyFullName,
+      legacy_full_name: namesChanged ? legacyFullName(fname, lname) : current.legacyFullName,
       hebrew_name: body.hebrewName ?? current.hebrewName,
       occupation: body.occupation ?? current.occupation,
       employer: body.employer ?? current.employer,
@@ -94,9 +94,9 @@ export async function patchContact(
       )
       await writeAudit(connection, staffId, changes)
     }
-    return writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
+    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
+    return finishContact(connection, contactId, affected)
   })
-  return finishContact(pool, contactId, affected)
 }
 
 type ListTable = 'family_contact_phones' | 'family_contact_emails' | 'family_contact_addresses'
@@ -233,7 +233,7 @@ async function replaceList(
   items: readonly ListItem[],
 ): Promise<ContactWriteResult> {
   assertOnePrimary(items.length, items.filter((item) => item.values['is_primary'] === 1).length)
-  const affected = await withStaffTransaction(pool, staffId, async (connection) => {
+  return withStaffTransaction(pool, staffId, async (connection) => {
     await lockActiveContact(connection, contactId)
     const existing = await rows<RowDataPacket>(
       connection,
@@ -291,9 +291,9 @@ async function replaceList(
     }
 
     await writeAudit(connection, staffId, changes)
-    return writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
+    const affected = await writeMirror(connection, await affectedChildIdsForContact(connection, contactId))
+    return finishContact(connection, contactId, affected)
   })
-  return finishContact(pool, contactId, affected)
 }
 
 interface ListPlan {
@@ -362,8 +362,9 @@ function blankRow(spec: ListSpec): Record<string, string | null> {
   return Object.fromEntries(spec.columns.map((column) => [column, null]))
 }
 
-async function finishContact(pool: Pool, contactId: number, affected: number[]): Promise<ContactWriteResult> {
-  const contact = await getContact(pool, contactId)
+/** Read inside the save's transaction, so the response is what this save committed, or nothing is committed. */
+async function finishContact(connection: PoolConnection, contactId: number, affected: number[]): Promise<ContactWriteResult> {
+  const contact = await getContact(connection, contactId)
   if (contact === null) {
     throw new ApiError(500, 'INTERNAL', 'Contact could not be read after it was saved.')
   }

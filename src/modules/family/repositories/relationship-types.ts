@@ -1,5 +1,5 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise'
-import { rows } from './query.js'
+import type { RowDataPacket } from 'mysql2/promise'
+import { rows, type Sql } from './query.js'
 
 export interface RelationshipTypeRow extends RowDataPacket {
   code: string
@@ -10,7 +10,7 @@ export interface RelationshipTypeRow extends RowDataPacket {
   status: 'active'
 }
 
-export async function listActiveRelationshipTypes(db: Pool): Promise<RelationshipTypeRow[]> {
+export async function listActiveRelationshipTypes(db: Sql): Promise<RelationshipTypeRow[]> {
   return rows<RelationshipTypeRow>(
     db,
     `SELECT code, label, parent_slot AS parentSlot, slot_rank AS slotRank, sort_order AS sortOrder, status

@@ -1,10 +1,10 @@
-import type { Pool } from 'mysql2/promise'
+import type { Sql } from '../repositories/query.js'
 import { draftFamilyId, findChild } from '../repositories/children.js'
 import { findActiveFamily } from '../repositories/families.js'
 import type { ChildFamily } from '../schemas/family.js'
 import { getFamily } from './families.js'
 
-export async function getChildFamily(db: Pool, childId: number): Promise<ChildFamily | null> {
+export async function getChildFamily(db: Sql, childId: number): Promise<ChildFamily | null> {
   const child = await findChild(db, childId)
   if (child === null) {
     return null

@@ -1,15 +1,15 @@
-import type { Pool, RowDataPacket } from 'mysql2/promise'
-import type { Sql } from './query.js'
+import type { RowDataPacket } from 'mysql2/promise'
 import { likeContains } from '../../../lib/like.js'
+import type { RecordStatus } from '../schemas/common.js'
 import { normalizedPhoneSql, phoneSearchKey } from '../../../lib/phone.js'
 import { PHONE_LOOKUP_SQL } from './phones.js'
-import { placeholders, rows, unionOf, type SearchMatch } from './query.js'
+import { placeholders, rows, unionOf, type SearchMatch, type Sql } from './query.js'
 
 export interface FamilyRow extends RowDataPacket {
   id: number
   name: string
   householdPhone: string
-  status: 'active' | 'trash'
+  status: RecordStatus
 }
 
 export interface MemberRow extends RowDataPacket {
@@ -73,7 +73,7 @@ function familyMatch(query: string): SearchMatch | null {
 }
 
 export async function pageFamilies(
-  db: Pool,
+  db: Sql,
   query: string,
   page: number,
   pageSize: number,
@@ -109,12 +109,12 @@ export async function findFamily(db: Sql, id: number): Promise<FamilyRow | null>
   return found[0] ?? null
 }
 
-export async function findActiveFamily(db: Pool, id: number): Promise<FamilyRow | null> {
+export async function findActiveFamily(db: Sql, id: number): Promise<FamilyRow | null> {
   const family = await findFamily(db, id)
   return family?.status === 'active' ? family : null
 }
 
-export async function listMembers(db: Pool, familyIds: readonly number[]): Promise<MemberRow[]> {
+export async function listMembers(db: Sql, familyIds: readonly number[]): Promise<MemberRow[]> {
   if (familyIds.length === 0) {
     return []
   }

@@ -1,8 +1,10 @@
 import { buildApp } from './app.js'
 import { loadConfig } from './config/env.js'
+import { installGracefulShutdown } from './lib/shutdown.js'
 
 const config = await loadConfig()
 const app = await buildApp({ config })
+installGracefulShutdown(app)
 
 try {
   await app.listen({ port: config.port, host: config.host })

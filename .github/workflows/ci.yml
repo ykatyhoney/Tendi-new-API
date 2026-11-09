@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'family/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    name: Typecheck, lint, unit tests, build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+
+  database:
+    name: Schema, reconcile, API and DB tests (MariaDB 10.11)
+    runs-on: ubuntu-24.04
+    # Ubuntu 24.04 ships MariaDB 10.11, installed with apt so the project's no-Docker rule holds here too.
+    # This job imports db/tendi-family-dev-db-2026-11-06.sql and db/tendi_family_module.sql from the repository.
+    # If those dumps move out of git, fetch them here from wherever they are kept instead.
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_NAME: tendi_family_test
+      FAMILY_DB_USER: family_api
+      FAMILY_DB_PASSWORD: ci-family-password
+      DB_ADMIN_USER: root
+      DB_ADMIN_PASSWORD: ci-root-password
+      MARIADB_BIN: mariadb
+      CORS_ORIGIN: http://127.0.0.1:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install MariaDB 10.11
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mariadb-server mariadb-client
+          sudo systemctl start mariadb
+          mariadb --version
+          sudo mariadb -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_ADMIN_PASSWORD}'; FLUSH PRIVILEGES;"
+      - run: npm ci
+      - run: npm run db:test:reset
+      - run: npm run db:verify-schema -- --database tendi_family_test
+      - name: Reconcile all linked children (0 differences expected)
+        run: npm run family:reconcile
+      - name: All test suites
+        # db:test:reset already ran above, so call vitest directly instead of npm test (which resets again).
+        run: npx vitest run
