@@ -2,7 +2,7 @@ import type { FastifyError, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import sensible from '@fastify/sensible'
 import { ApiError, errorBody, statusText } from '../lib/api-error.js'
-import { mapDatabaseError, RETRY_AFTER_SECONDS } from '../lib/db-errors.js'
+import { databaseUnavailable, mapDatabaseError, RETRY_AFTER_SECONDS } from '../lib/db-errors.js'
 import { validationDetails } from '../lib/validator.js'
 import type { ErrorObject } from 'ajv'
 
@@ -27,6 +27,14 @@ const errorsPlugin: FastifyPluginAsync = async (app) => {
       return reply
         .status(error.statusCode)
         .send(errorBody(error.statusCode, error.code, error.message, error.details))
+    }
+
+    // A database outage is a 503, not a 500: the request was fine and will work once MariaDB is back.
+    // This is also what makes GET /health answer 503 when its ping fails.
+    const unavailable = databaseUnavailable(error)
+    if (unavailable !== null) {
+      request.log.error({ err: error, requestId: request.id }, 'the database is not available')
+      return reply.status(unavailable.statusCode).send(unavailable)
     }
 
     const databaseError = mapDatabaseError(error)
@@ -69,6 +77,11 @@ function httpStatus(error: FastifyError): number {
 }
 
 function errorCode(error: FastifyError, statusCode: number): string {
+  if (statusCode >= 500) {
+    // Never the error's own code: on a server error that is a driver's or Node's (ECONNRESET,
+    // ERR_INVALID_ARG_TYPE), which says how the API is built and is not one of the API's codes.
+    return 'INTERNAL'
+  }
   if (statusCode === 429) {
     return 'RATE_LIMIT'
   }
@@ -78,7 +91,7 @@ function errorCode(error: FastifyError, statusCode: number): string {
   if (statusCode === 404) {
     return 'NOT_FOUND'
   }
-  return statusCode >= 500 ? 'INTERNAL' : statusText(statusCode).replaceAll(' ', '_').toUpperCase()
+  return statusText(statusCode).replaceAll(' ', '_').toUpperCase()
 }
 
 export default fp(errorsPlugin, { name: 'family-errors' })

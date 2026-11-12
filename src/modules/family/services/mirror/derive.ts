@@ -95,6 +95,7 @@ export function legacyColumnValue(values: LegacyValues, column: LegacyColumn): s
   return values[column]
 }
 
+/** Characters, as MariaDB counts them in a utf8mb4 column (code points, not UTF-16 units). */
 export function characterLength(value: string): number {
   return Array.from(value).length
 }

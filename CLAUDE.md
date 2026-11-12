@@ -26,7 +26,8 @@ Every write runs in `withStaffTransaction()` (READ COMMITTED; see the comment in
 - `src/modules/family/services/`: reads compose repositories and map rows with `mappers.ts`. `services/write/*`, `links.ts`, and `relationship-types.ts` hold their write SQL next to the locking and audit that must surround it.
 - `src/modules/family/services/mirror/`: `derive.ts` is pure; `load.ts` reads; `write.ts` writes under `@family_mirror = 1`.
 - Redis: optional and fail-open. Use `app.cache` (`src/lib/cache.ts`), never the client directly. Cache only data this API alone writes, delete the key after the write commits, and give every entry a TTL. Never cache the token lookup or family, contact, or child rows. See "Redis" in docs/CONTEXT.md.
-- Errors: throw `ApiError(status, CODE, message, details?)`. MariaDB errors are mapped in `src/lib/db-errors.ts`. Every route documents the `ApiError` body for 4XX and 5XX.
+- Errors: throw `ApiError(status, CODE, message, details?)`. MariaDB errors are mapped in `src/lib/db-errors.ts` (a lost or refused connection is 503 `UNAVAILABLE`). Any other error is 500 `INTERNAL`; its own `code` is never sent. Every route documents the `ApiError` body for 4XX and 5XX.
+- A child the main admin trashed keeps its `family_id`: it is still mirrored, still blocks archiving its family, and can still be unlinked. Only `GET /families/:id` lists it (`status: trash`).
 
 ## Before you finish
 

@@ -11,7 +11,7 @@ import { sameLegacyValue } from '../../src/modules/family/services/mirror/derive
 import { ADDITIONAL_MIRROR_COLUMNS, CHILDREN_MIRROR_COLUMNS } from '../../src/modules/family/services/mirror/types.js'
 import { issueDevToken, revokeDevTokens } from '../../scripts/dev-token.js'
 import { loadAdminConfig } from '../../scripts/mariadb-admin.js'
-import { unlinkWithFlag } from '../helpers/lock.js'
+import { asFamilyApi, unlinkWithFlag } from '../helpers/lock.js'
 
 const TEST_DATABASE = 'tendi_family_test'
 const MIRROR_COLUMNS = [...CHILDREN_MIRROR_COLUMNS, ...ADDITIONAL_MIRROR_COLUMNS]
@@ -334,6 +334,96 @@ describe('link, unlink, preview and rights', () => {
       })
       expect(restored.statusCode).toBe(200)
     }
+  })
+
+  it('lists a linked child that the main admin trashed, and lets it be unlinked so the family can be archived', async () => {
+    // A family with exactly one linked child: that child alone is what keeps the family from being archived.
+    const [found] = await connection.query<RowDataPacket[]>(
+      `SELECT c.id AS childId, c.family_id AS familyId, c.status AS status, f.name AS familyName
+       FROM children AS c
+       INNER JOIN families AS f ON f.id = c.family_id AND f.status = 'active'
+       WHERE c.status <> 'trash'
+         AND (SELECT COUNT(*) FROM children AS sibling WHERE sibling.family_id = c.family_id) = 1
+         AND EXISTS (
+           SELECT 1 FROM family_member_children AS r
+           INNER JOIN family_members AS m ON m.id = r.member_id AND m.family_id = c.family_id AND m.status = 'active'
+           WHERE r.child_id = c.id
+         )
+       ORDER BY c.id
+       LIMIT 1`,
+    )
+    expect(found[0], 'an active family with exactly one linked child, who has rights there').toBeDefined()
+    const childId = Number(found[0]?.['childId'])
+    const familyId = Number(found[0]?.['familyId'])
+    const familyName = String(found[0]?.['familyName'])
+    const before = await snapshotChild(childId)
+    const [auditMark] = await connection.query<RowDataPacket[]>(`SELECT COALESCE(MAX(id), 0) AS id FROM audit_logs`)
+    const family = () => app.inject({ method: 'GET', url: `/api/v1/families/${familyId}`, headers: auth })
+    const archive = () =>
+      app.inject({ method: 'PATCH', url: `/api/v1/families/${familyId}`, headers: auth, payload: { status: 'trash' } })
+    try {
+      expect((await family()).json().children).toEqual([expect.objectContaining({ id: childId, status: found[0]?.['status'] })])
+
+      // The legacy app trashes the child. It stays linked: only this API may clear family_id.
+      await connection.query(`UPDATE children SET status = 'trash' WHERE id = ?`, [childId])
+
+      // The family's own page still lists it, marked as trashed, without its rights (they cannot be saved).
+      const detail = (await family()).json()
+      expect(detail.children).toEqual([expect.objectContaining({ id: childId, status: 'trash' })])
+      const rights = detail.members.flatMap((member: { rights: { childId: number }[] }) => member.rights)
+      expect(rights.some((row: { childId: number }) => row.childId === childId)).toBe(false)
+
+      // The family list leaves a trashed child out.
+      let summary: { id: number; childCount: number; children: { id: number }[] } | undefined
+      for (let page = 1; page <= 10 && summary === undefined; page += 1) {
+        const listed = (
+          await app.inject({
+            method: 'GET',
+            url: `/api/v1/families?q=${encodeURIComponent(familyName)}&page=${page}&pageSize=100`,
+            headers: auth,
+          })
+        ).json()
+        summary = listed.items.find((item: { id: number }) => item.id === familyId)
+        if (page * 100 >= listed.total) {
+          break
+        }
+      }
+      expect(summary).toMatchObject({ id: familyId, childCount: 0, children: [] })
+
+      // It still blocks archiving, and the answer names it.
+      const refused = await archive()
+      expect(refused.statusCode).toBe(409)
+      expect(refused.json()).toMatchObject({ code: 'HAS_LINKED_CHILDREN', details: { childIds: [childId] } })
+
+      // Unlink works for it, and leaves the 28 old values as they are.
+      const unlinked = await app.inject({ method: 'POST', url: `/api/v1/children/${childId}/unlink`, headers: auth })
+      expect(unlinked.statusCode, unlinked.body).toBe(200)
+      expect(unlinked.json()).toEqual({ childId, familyId: null, affected_child_ids: [] })
+      const after = await snapshotChild(childId)
+      expect(after.familyId).toBeNull()
+      expect(after.children).toEqual(before.children)
+      expect(after.additional).toEqual(before.additional)
+      expect((await family()).json().children).toEqual([])
+
+      // A second unlink has nothing to do.
+      const again = await app.inject({ method: 'POST', url: `/api/v1/children/${childId}/unlink`, headers: auth })
+      expect(again.statusCode).toBe(404)
+
+      const archived = await archive()
+      expect(archived.statusCode, archived.body).toBe(200)
+      expect(archived.json().family.status).toBe('trash')
+    } finally {
+      // Back to the dump's state: the family active, the child linked to it (as family_api, under the mirror
+      // flag, which changes none of the 28 columns), its status, and none of this test's audit rows.
+      await connection.query(`UPDATE families SET status = 'active' WHERE id = ?`, [familyId])
+      await asFamilyApi(app.db, (session) =>
+        session.query(`UPDATE children SET family_id = ? WHERE id = ?`, [familyId, childId]),
+      )
+      await connection.query(`UPDATE children SET status = ? WHERE id = ?`, [found[0]?.['status'], childId])
+      await connection.query(`DELETE FROM audit_logs WHERE id > ?`, [auditMark[0]?.['id']])
+    }
+    const restored = await snapshotChild(childId)
+    expect(restored).toEqual(before)
   })
 
   it('puts a root edit of a linked parent name back and logs it', async () => {

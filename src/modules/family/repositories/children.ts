@@ -9,7 +9,7 @@ export interface ChildRow extends RowDataPacket {
   fname: string
   lname: string
   classId: number
-  status: string
+  status: 'active' | 'inactive' | 'trash'
 }
 
 export interface RightsRow extends RowDataPacket {
@@ -25,7 +25,16 @@ export interface RightsRow extends RowDataPacket {
   isPaymentResponsible: number
 }
 
-export async function listChildren(db: Sql, familyIds: readonly number[]): Promise<ChildRow[]> {
+/**
+ * The children linked to these families. A child trashed in the main admin keeps its family_id, so it is still
+ * mirrored and still blocks archiving the family. The family list leaves it out; a family's own page asks for it
+ * with includeTrashed (listed last), because that page is where it can be unlinked.
+ */
+export async function listChildren(
+  db: Sql,
+  familyIds: readonly number[],
+  options: { includeTrashed?: boolean } = {},
+): Promise<ChildRow[]> {
   if (familyIds.length === 0) {
     return []
   }
@@ -33,8 +42,9 @@ export async function listChildren(db: Sql, familyIds: readonly number[]): Promi
     db,
     `SELECT id, family_id AS familyId, fname, lname, \`class\` AS classId, status
      FROM children
-     WHERE status <> 'trash' AND family_id IN (${placeholders(familyIds.length)})
-     ORDER BY family_id, lname, fname, id`,
+     WHERE family_id IN (${placeholders(familyIds.length)})
+       ${options.includeTrashed === true ? '' : "AND status <> 'trash'"}
+     ORDER BY family_id, status = 'trash', lname, fname, id`,
     familyIds,
   )
 }
@@ -158,19 +168,25 @@ export async function findChildListRow(db: Sql, childId: number): Promise<ChildL
   return found[0] ?? null
 }
 
+/**
+ * These members' rights rows, for the screens. A trashed child's rows are left out: its rights cannot be saved
+ * (PUT .../rights answers 404 for it), and a row for a child the screens cannot open would be offered as a
+ * child to link. The mirror reads rights with its own query and still sees them.
+ */
 export async function listRights(db: Sql, memberIds: readonly number[]): Promise<RightsRow[]> {
   if (memberIds.length === 0) {
     return []
   }
   return rows<RightsRow>(
     db,
-    `SELECT id, member_id AS memberId, child_id AS childId,
-            receives_notifications AS receivesNotifications, notify_method AS notifyMethod,
-            may_collect AS mayCollect, collect_from AS collectFrom, collect_to AS collectTo,
-            is_emergency AS isEmergency, is_payment_responsible AS isPaymentResponsible
-     FROM family_member_children
-     WHERE member_id IN (${placeholders(memberIds.length)})
-     ORDER BY member_id, child_id`,
+    `SELECT r.id, r.member_id AS memberId, r.child_id AS childId,
+            r.receives_notifications AS receivesNotifications, r.notify_method AS notifyMethod,
+            r.may_collect AS mayCollect, r.collect_from AS collectFrom, r.collect_to AS collectTo,
+            r.is_emergency AS isEmergency, r.is_payment_responsible AS isPaymentResponsible
+     FROM family_member_children AS r
+     INNER JOIN children AS c ON c.id = r.child_id AND c.status <> 'trash'
+     WHERE r.member_id IN (${placeholders(memberIds.length)})
+     ORDER BY r.member_id, r.child_id`,
     memberIds,
   )
 }

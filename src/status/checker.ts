@@ -356,7 +356,7 @@ const EMPTY_CONTEXT: ProbeContext = {
 
 /** Probes that only call fixed paths (health, access, validation) still run when the setup failed. */
 function needsContext(probe: Probe): boolean {
-  return !['health-live', 'health-ready', 'access-token', 'access-public', 'families-create', 'links-unlink', 'types-list', 'types-create'].includes(probe.id)
+  return !['health-live', 'health-ready', 'access-token', 'access-public', 'staff-me', 'families-create', 'links-unlink', 'types-list', 'types-create'].includes(probe.id)
 }
 
 /** fetch() reports "fetch failed"; the cause says why (ECONNREFUSED, a timeout, a TLS error). */
@@ -366,7 +366,7 @@ export function describeError(error: unknown): string {
   }
   const cause = error.cause as { code?: unknown; message?: unknown } | undefined
   if (error.name === 'TimeoutError') {
-    return 'no answer within 15 s'
+    return `no answer within ${REQUEST_TIMEOUT_MS / 1000} s`
   }
   if (cause !== undefined && cause !== null) {
     const code = typeof cause.code === 'string' ? cause.code : undefined

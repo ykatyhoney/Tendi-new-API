@@ -4,6 +4,7 @@ import {
   addressType,
   email,
   emailType,
+  NOT_BLANK,
   phone,
   phoneChannel,
   phoneType,
@@ -127,7 +128,7 @@ const phoneInputDefinition = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
-    phone: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.phone }),
+    phone: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.phone, pattern: NOT_BLANK }),
     type: Type.Optional(phoneType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     channel: Type.Optional(phoneChannel),
@@ -142,7 +143,7 @@ const emailInputDefinition = Type.Object(
   {
     /** An existing row of this contact to keep and update. Without it, an identical row is kept, else a new one is added. */
     id: Type.Optional(Type.Integer({ minimum: 1 })),
-    email: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.email }),
+    email: Type.String({ minLength: 1, maxLength: OLD_COLUMN_LIMITS.email, pattern: NOT_BLANK }),
     type: Type.Optional(emailType),
     typeLabel: Type.Optional(Type.Union([Type.String({ maxLength: 50 }), Type.Null()])),
     isPrimary: Type.Optional(Type.Boolean()),

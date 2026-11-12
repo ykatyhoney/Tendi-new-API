@@ -33,6 +33,7 @@ export interface MemberRow extends RowDataPacket {
 
 /**
  * Families whose name, member name, member phone, or household phone matches the query.
+ * A member's name is matched as the contact search matches it, "first last" included.
  * One UNION, so paging and the total are done in SQL instead of on a list of ids.
  */
 function familyMatch(query: string): SearchMatch | null {
@@ -48,8 +49,9 @@ function familyMatch(query: string): SearchMatch | null {
             FROM family_members AS m
             INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
             WHERE m.status = 'active'
-              AND (c.fname LIKE ? ESCAPE '\\\\' OR c.lname LIKE ? ESCAPE '\\\\' OR c.legacy_full_name LIKE ? ESCAPE '\\\\')`,
-      params: [like, like, like],
+              AND (c.fname LIKE ? ESCAPE '\\\\' OR c.lname LIKE ? ESCAPE '\\\\' OR c.legacy_full_name LIKE ? ESCAPE '\\\\'
+                   OR CONCAT(c.fname, ' ', c.lname) LIKE ? ESCAPE '\\\\')`,
+      params: [like, like, like, like],
     },
   ]
   const phone = phoneSearch(q)

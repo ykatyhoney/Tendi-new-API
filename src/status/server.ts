@@ -16,7 +16,7 @@ const port = Number(process.env['STATUS_PORT'] ?? '3101')
 const basePath = (process.env['STATUS_BASE_PATH'] ?? '/status').replace(/\/$/, '')
 const checker = new StatusChecker(config)
 const page = statusPage(basePath)
-/** "Run checks now" is ignored when a run finished less than this long ago. */
+/** "Run checks now" starts a run at most this often. A press sooner than that gets the current summary. */
 const MANUAL_RUN_GAP_MS = 5000
 let lastManualRun = 0
 
@@ -41,8 +41,13 @@ const server = createServer((request, response) => {
   }
   if (request.method === 'POST' && url.pathname === `${basePath}/api/run`) {
     const now = Date.now()
-    const run = now - lastManualRun < MANUAL_RUN_GAP_MS ? Promise.resolve() : checker.run()
-    lastManualRun = now
+    let run: Promise<void> = Promise.resolve()
+    // Only a press that starts a run moves the clock. Counting ignored presses too meant that pressing every
+    // few seconds never ran the checks at all.
+    if (now - lastManualRun >= MANUAL_RUN_GAP_MS) {
+      lastManualRun = now
+      run = checker.run()
+    }
     run
       .then(() => send(200, 'application/json', JSON.stringify(checker.summary())))
       .catch((error: unknown) => send(500, 'application/json', JSON.stringify({ error: String(error) })))

@@ -1,6 +1,7 @@
 import fastifyEnv from '@fastify/env'
 import { Type } from '@fastify/type-provider-typebox'
 import Fastify from 'fastify'
+import { LOCAL_DB_HOSTS } from '../lib/database-target.js'
 
 const nodeEnvSchema = Type.Union(
   [Type.Literal('development'), Type.Literal('test'), Type.Literal('production')],
@@ -83,8 +84,6 @@ export interface LoadConfigOptions {
   data?: Record<string, unknown>
 }
 
-const LOCAL_DB_HOSTS = new Set(['127.0.0.1', 'localhost'])
-
 export function assertLocalDatabaseHost(env: Pick<RawEnv, 'NODE_ENV' | 'DB_HOST'>): void {
   if (env.NODE_ENV === 'production') {
     return
@@ -161,6 +160,15 @@ function splitList(value: string): string[] {
     .filter((item) => item.length > 0)
 }
 
+/** True when the text is exactly what a browser puts in the Origin header for that site. */
+function isBrowserOrigin(value: string): boolean {
+  try {
+    return new URL(value).origin === value
+  } catch {
+    return false
+  }
+}
+
 export function toAppConfig(env: RawEnv): AppConfig {
   return {
     nodeEnv: env.NODE_ENV,
@@ -192,9 +200,17 @@ export function toAppConfig(env: RawEnv): AppConfig {
  * also a staff type is refused with 403 before it reaches the routes it was listed for (open item D5).
  */
 export function configWarnings(
-  config: Pick<AppConfig, 'nodeEnv' | 'allowedStaffTypes' | 'relationshipAdminTypes' | 'redisUrl'>,
+  config: Pick<AppConfig, 'nodeEnv' | 'allowedStaffTypes' | 'relationshipAdminTypes' | 'redisUrl' | 'corsOrigins'>,
 ): string[] {
   const warnings: string[] = []
+  // CORS compares each entry with the browser's Origin header as text, so anything but an exact origin never matches.
+  const notOrigins = config.corsOrigins.filter((origin) => !isBrowserOrigin(origin))
+  if (notOrigins.length > 0) {
+    warnings.push(
+      `CORS_ORIGIN lists ${notOrigins.join(', ')}, which is not an origin as a browser sends it ` +
+        '(scheme://host[:port] in lower case, no path, no trailing slash, no default port). Requests from it are refused.',
+    )
+  }
   const unreachable = config.relationshipAdminTypes.filter((type) => !config.allowedStaffTypes.includes(type))
   if (unreachable.length > 0) {
     warnings.push(

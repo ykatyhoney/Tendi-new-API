@@ -43,6 +43,12 @@ export const recordStatus = model('RecordStatus', recordStatusDefinition)
 /** sort_order columns are int(11). A value outside this range is a 400, not a database error. */
 export const sortOrder = Type.Integer({ minimum: -2147483648, maximum: 2147483647 })
 
+/**
+ * A JSON Schema pattern for a required text: at least one character that is not white space. minLength alone
+ * accepts "   ", which would be saved as a family with no visible name, or mirrored as a blank phone.
+ */
+export const NOT_BLANK = '\\S'
+
 const phoneDefinition = Type.Object(
   {
     id: Type.Integer(),

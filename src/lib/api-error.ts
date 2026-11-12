@@ -40,6 +40,9 @@ const STATUS_TEXT: Record<number, string> = {
   403: 'Forbidden',
   404: 'Not Found',
   409: 'Conflict',
+  // Fastify's own refusals of a request body. Their codes become PAYLOAD_TOO_LARGE and UNSUPPORTED_MEDIA_TYPE.
+  413: 'Payload Too Large',
+  415: 'Unsupported Media Type',
   429: 'Too Many Requests',
   500: 'Internal Server Error',
   503: 'Service Unavailable',

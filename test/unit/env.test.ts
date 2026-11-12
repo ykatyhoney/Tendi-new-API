@@ -124,6 +124,19 @@ describe('configWarnings', () => {
     expect(configWarnings({ ...config, redisUrl: 'redis://cache.internal:6379' })).toEqual([])
   })
 
+  it('warns about a CORS_ORIGIN entry that no browser origin can equal', async () => {
+    const staff = { ALLOWED_STAFF_TYPES: 'admin,office,superadmin' }
+    const read = async (origins: string) =>
+      configWarnings(await loadConfig({ ...isolated, data: { ...staff, CORS_ORIGIN: origins } }))
+
+    expect(await read('http://127.0.0.1:3001, https://families.tendi.example')).toEqual([])
+    for (const wrong of ['https://families.tendi.example/', 'https://families.tendi.example/admin', 'HTTPS://Families.Tendi.Example', 'http://localhost:80', 'families.tendi.example', '*']) {
+      const warnings = await read(`http://127.0.0.1:3001, ${wrong}`)
+      expect(warnings, wrong).toHaveLength(1)
+      expect(warnings[0], wrong).toContain(`CORS_ORIGIN lists ${wrong},`)
+    }
+  })
+
   it('is quiet when every relationship-admin type is a staff type', async () => {
     const config = await loadConfig({
       ...isolated,

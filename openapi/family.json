@@ -475,7 +475,8 @@
           "id",
           "fname",
           "lname",
-          "class"
+          "class",
+          "status"
         ],
         "properties": {
           "id": {
@@ -489,6 +490,29 @@
           },
           "class": {
             "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "inactive"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "trash"
+                ]
+              }
+            ],
+            "description": "children.status. 'trash' appears only in a family's own children: a child trashed in the main admin stays linked (and mirrored) until it is unlinked, and the family cannot be archived before that. The family list leaves trashed children out."
           }
         },
         "additionalProperties": false
@@ -805,7 +829,8 @@
           "name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100
+            "maxLength": 100,
+            "pattern": "\\S"
           },
           "householdPhone": {
             "type": "string",
@@ -820,7 +845,8 @@
           "name": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 100
+            "maxLength": 100,
+            "pattern": "\\S"
           },
           "householdPhone": {
             "type": "string",
@@ -1200,7 +1226,8 @@
           "phone": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 30
+            "maxLength": 30,
+            "pattern": "\\S"
           },
           "type": {
             "$ref": "#/components/schemas/PhoneType"
@@ -1237,7 +1264,8 @@
           "email": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 150
+            "maxLength": 150,
+            "pattern": "\\S"
           },
           "type": {
             "$ref": "#/components/schemas/EmailType"
@@ -1871,7 +1899,8 @@
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 64
+            "maxLength": 64,
+            "pattern": "\\S"
           },
           "sortOrder": {
             "type": "integer",
@@ -1887,7 +1916,8 @@
           "label": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 64
+            "maxLength": 64,
+            "pattern": "\\S"
           },
           "sortOrder": {
             "type": "integer",

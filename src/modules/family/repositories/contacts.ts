@@ -62,7 +62,11 @@ export interface HouseholdRow extends RowDataPacket {
   sortOrder: number
 }
 
-/** Contacts whose name or any phone matches the query, as one UNION. */
+/**
+ * Contacts whose name or any phone matches the query, as one UNION. The name is the first name, the last name,
+ * "first last" as staff type it, or the legacy name. legacy_full_name is the first name only for nearly every
+ * contact, so without the "first last" match a full name found nobody.
+ */
 function contactMatch(query: string): SearchMatch | null {
   const q = query.trim()
   if (q.length === 0) {
@@ -72,8 +76,9 @@ function contactMatch(query: string): SearchMatch | null {
   const branches: SearchMatch[] = [
     {
       sql: `SELECT id FROM family_contacts
-            WHERE fname LIKE ? ESCAPE '\\\\' OR lname LIKE ? ESCAPE '\\\\' OR legacy_full_name LIKE ? ESCAPE '\\\\'`,
-      params: [like, like, like],
+            WHERE fname LIKE ? ESCAPE '\\\\' OR lname LIKE ? ESCAPE '\\\\' OR legacy_full_name LIKE ? ESCAPE '\\\\'
+               OR CONCAT(fname, ' ', lname) LIKE ? ESCAPE '\\\\'`,
+      params: [like, like, like, like],
     },
   ]
   const phone = phoneSearch(q)

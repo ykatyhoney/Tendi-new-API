@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapDatabaseError } from '../../src/lib/db-errors.js'
+import { databaseUnavailable, mapDatabaseError } from '../../src/lib/db-errors.js'
 
 function databaseError(errno: number, sqlMessage: string) {
   return Object.assign(new Error(sqlMessage), {
@@ -97,5 +97,39 @@ describe('logic fixes: MariaDB errors', () => {
     const body = mapDatabaseError(databaseError(1406, "Data too long for column 'father_home_phone' at row 1"))
     expect(body).toMatchObject({ statusCode: 409, code: 'VALUE_TOO_LONG', details: { column: 'father_home_phone' } })
     expect(JSON.stringify(body)).not.toContain('secret-row')
+  })
+})
+
+describe('a database that cannot be reached', () => {
+  const unavailable = { statusCode: 503, code: 'UNAVAILABLE', error: 'Service Unavailable' }
+
+  it('is 503 UNAVAILABLE for a refused, lost, or timed-out connection', () => {
+    for (const code of ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'PROTOCOL_CONNECTION_LOST', 'POOL_CLOSED']) {
+      const body = databaseUnavailable(Object.assign(new Error(`connect ${code} 10.0.0.8:3306`), { code }))
+      expect(body, code).toMatchObject(unavailable)
+      // Where the database is stays out of the response.
+      expect(JSON.stringify(body)).not.toContain('10.0.0.8')
+    }
+  })
+
+  it('is 503 UNAVAILABLE when the server is out of connections, shutting down, or ended the session', () => {
+    expect(databaseUnavailable(databaseError(1040, 'Too many connections'))).toMatchObject(unavailable)
+    expect(databaseUnavailable(databaseError(1053, 'Server shutdown in progress'))).toMatchObject(unavailable)
+    expect(databaseUnavailable(databaseError(1927, 'Connection was killed'))).toMatchObject(unavailable)
+    // mysql2 marks an error that ended the connection, such as a refused sign-in, as fatal.
+    const denied = Object.assign(databaseError(1045, "Access denied for user 'family_api'@'localhost'"), {
+      code: 'ER_ACCESS_DENIED_ERROR',
+      fatal: true,
+    })
+    expect(databaseUnavailable(denied)).toMatchObject(unavailable)
+  })
+
+  it('leaves a failed statement, a deadlock, and any other error to the other mappings', () => {
+    expect(databaseUnavailable(databaseError(1062, "Duplicate entry '1-2' for key 'uniq_fm'"))).toBeNull()
+    expect(databaseUnavailable(databaseError(1213, 'Deadlock found when trying to get lock'))).toBeNull()
+    expect(databaseUnavailable(new Error('boom'))).toBeNull()
+    expect(databaseUnavailable(Object.assign(new Error('boom'), { fatal: true }))).toBeNull()
+    expect(databaseUnavailable(null)).toBeNull()
+    expect(databaseUnavailable('ECONNREFUSED')).toBeNull()
   })
 })

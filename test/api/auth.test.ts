@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { FastifyPluginAsync } from 'fastify'
 import mysql, { type RowDataPacket } from 'mysql2/promise'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../src/app.js'
 import { loadConfig } from '../../src/config/env.js'
 import { tokenHash } from '../../src/lib/token-hash.js'
@@ -88,6 +88,32 @@ describe('staff auth', () => {
       [tokenHash(token)],
     )
     expect(String(rows[0]?.['seen'])).not.toBe('2000-01-01 00:00:00')
+  })
+
+  it('still serves the request when last_seen_at cannot be written', async () => {
+    // A new token row, so this request is the one that tries to record last_seen_at.
+    const token = await insertToken(connection, accounts.admin.id)
+    const realQuery = app.db.query.bind(app.db) as (...args: unknown[]) => Promise<unknown>
+    let refusedWrites = 0
+    const spy = vi.spyOn(app.db, 'query').mockImplementation(((...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].includes('UPDATE admin_api_tokens')) {
+        refusedWrites += 1
+        return Promise.reject(Object.assign(new Error('Lock wait timeout exceeded'), { errno: 1205 }))
+      }
+      return realQuery(...args)
+    }) as unknown as typeof app.db.query)
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/_who',
+        headers: { authorization: `Bearer ${token}` },
+      })
+      expect(response.statusCode, response.body).toBe(200)
+      expect(response.json()).toMatchObject({ adminId: accounts.admin.id, type: 'admin' })
+      expect(refusedWrites).toBe(1)
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('lets office staff through and refuses a teacher and a superadmin', async () => {

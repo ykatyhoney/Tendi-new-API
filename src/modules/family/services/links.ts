@@ -117,7 +117,10 @@ export async function unlinkChild(pool: Pool, staffId: number, childId: number):
       await lockFamilies(connection, [peeked.familyId])
     }
     const child = await readChild(connection, childId, true)
-    if (child === null || child.status === 'trash') {
+    // A trashed child is unlinked like any other. It keeps its family_id when the main admin trashes it, only
+    // this API may clear family_id, and its family cannot be archived (or lose its last member) while it is
+    // linked. Refusing it here would leave that family with no way out.
+    if (child === null) {
       throw new ApiError(404, 'NOT_FOUND', 'Child not found')
     }
     if (child.familyId === null) {

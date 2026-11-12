@@ -1,6 +1,6 @@
 import { Type } from '@fastify/type-provider-typebox'
 import { model } from './models.js'
-import { sortOrder } from './common.js'
+import { NOT_BLANK, sortOrder } from './common.js'
 
 /** Lowercase letters and _, starting with a letter. */
 const RELATIONSHIP_CODE_PATTERN = '^[a-z][a-z_]*$'
@@ -46,7 +46,7 @@ export const relationshipTypeParams = Type.Object({
 const createRelationshipTypeBodyDefinition = Type.Object(
   {
     code: Type.String({ minLength: 1, maxLength: 32, pattern: RELATIONSHIP_CODE_PATTERN }),
-    label: Type.String({ minLength: 1, maxLength: 64 }),
+    label: Type.String({ minLength: 1, maxLength: 64, pattern: NOT_BLANK }),
     sortOrder,
   },
   { additionalProperties: false },
@@ -55,7 +55,7 @@ export const createRelationshipTypeBody = model('CreateRelationshipTypeBody', cr
 
 const patchRelationshipTypeBodyDefinition = Type.Object(
   {
-    label: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+    label: Type.Optional(Type.String({ minLength: 1, maxLength: 64, pattern: NOT_BLANK })),
     sortOrder: Type.Optional(sortOrder),
     status: Type.Optional(Type.Union([Type.Literal('active'), Type.Literal('inactive')])),
   },

@@ -57,7 +57,7 @@ const securityPlugin: FastifyPluginAsync = async (app) => {
   app.addHook('onRequest', async (request, reply) => {
     const result = await limitByToken(request)
     if ('isExceeded' in result && result.isExceeded) {
-      return sendRateLimit(reply)
+      return sendRateLimit(reply, result.ttlInSeconds)
     }
     return undefined
   })
@@ -72,7 +72,11 @@ function bearerToken(request: FastifyRequest): string | undefined {
   return readBearerToken(typeof header === 'string' ? header : undefined)
 }
 
-function sendRateLimit(reply: FastifyReply) {
+/** Retry-After as the per-IP limit sends it: the seconds until this token's window ends. */
+function sendRateLimit(reply: FastifyReply, retryAfterSeconds: number) {
+  if (retryAfterSeconds > 0) {
+    reply.header('retry-after', retryAfterSeconds)
+  }
   return reply
     .code(429)
     .send(errorBody(429, 'RATE_LIMIT', 'Too many requests for this token. Try again in a minute.'))

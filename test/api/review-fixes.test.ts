@@ -112,6 +112,67 @@ describe('review fixes against MariaDB', () => {
     expect(stored[0]).toMatchObject({ fname: 'Bina', lname: 'Twelve' })
   })
 
+  it('refuses a family name, phone, email, or relationship label that is only spaces', async () => {
+    const [before] = await connection.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM families`)
+    const blankFamily = await app.inject({ method: 'POST', url: '/api/v1/families', headers: auth, payload: { name: '   ' } })
+    expect(blankFamily.statusCode, blankFamily.body).toBe(400)
+    expect(blankFamily.json()).toMatchObject({ code: 'VALIDATION', details: [{ path: '/name' }] })
+    const [after] = await connection.query<RowDataPacket[]>(`SELECT COUNT(*) AS n FROM families`)
+    expect(after[0]?.['n']).toBe(before[0]?.['n'])
+
+    const familyId = await createFamily('B13 blanks')
+    const renamed = await app.inject({ method: 'PATCH', url: `/api/v1/families/${familyId}`, headers: auth, payload: { name: ' \t ' } })
+    expect(renamed.statusCode).toBe(400)
+    expect(renamed.json()).toMatchObject({ code: 'VALIDATION', details: [{ path: '/name' }] })
+
+    const added = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${familyId}/members`,
+      headers: auth,
+      payload: { relationship: spareType, contact: { fname: 'Blanca', lname: 'Thirteen' } },
+    })
+    expect(added.statusCode, added.body).toBe(200)
+    const contactId = Number(added.json().family.members[0].contact.id)
+    createdContacts.push(contactId)
+
+    const phones = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/contacts/${contactId}/phones`,
+      headers: auth,
+      payload: { phones: [{ phone: '   ', type: 'mobile', isPrimary: true }] },
+    })
+    expect(phones.statusCode).toBe(400)
+    expect(phones.json()).toMatchObject({ code: 'VALIDATION', details: [{ path: '/phones/0/phone' }] })
+
+    const emails = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/contacts/${contactId}/emails`,
+      headers: auth,
+      payload: { emails: [{ email: '  ', isPrimary: true }] },
+    })
+    expect(emails.statusCode).toBe(400)
+    expect(emails.json()).toMatchObject({ code: 'VALIDATION', details: [{ path: '/emails/0/email' }] })
+
+    const [stored] = await connection.query<RowDataPacket[]>(
+      `SELECT (SELECT COUNT(*) FROM family_contact_phones WHERE family_contact_id = ?) AS phones,
+              (SELECT COUNT(*) FROM family_contact_emails WHERE family_contact_id = ?) AS emails,
+              (SELECT name FROM families WHERE id = ?) AS name`,
+      [contactId, contactId, familyId],
+    )
+    expect(stored[0]).toMatchObject({ phones: 0, emails: 0, name: 'B13 blanks' })
+
+    const label = await app.inject({
+      method: 'POST',
+      url: '/api/v1/relationship-types',
+      headers: auth,
+      payload: { code: 'b_blank_label', label: '  ', sortOrder: 991 },
+    })
+    expect(label.statusCode).toBe(400)
+    expect(label.json()).toMatchObject({ code: 'VALIDATION', details: [{ path: '/label' }] })
+    const [types] = await connection.query<RowDataPacket[]>(`SELECT code FROM relationship_types WHERE code = 'b_blank_label'`)
+    expect(types).toHaveLength(0)
+  })
+
   it('answers two simultaneous creates of one code with 200 and 409 DUPLICATE_CODE', async () => {
     const create = () =>
       app.inject({

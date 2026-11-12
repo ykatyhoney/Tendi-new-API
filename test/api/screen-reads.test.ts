@@ -323,6 +323,35 @@ describe('reads for the screens', () => {
   })
 
   describe('GET /contacts', () => {
+    it('finds a contact, and the family they are in, by first and last name together', async () => {
+      // legacy_full_name is the first name only, so "first last" has to be matched on the two columns.
+      const [found] = await connection.query<RowDataPacket[]>(
+        `SELECT c.id, c.fname, c.lname, m.family_id AS familyId
+         FROM family_contacts AS c
+         INNER JOIN family_members AS m ON m.family_contact_id = c.id AND m.status = 'active'
+         INNER JOIN families AS f ON f.id = m.family_id AND f.status = 'active'
+         WHERE c.status = 'active' AND c.fname <> '' AND c.lname <> '' AND c.legacy_full_name = c.fname
+           AND f.name NOT LIKE CONCAT('%', c.fname, ' ', c.lname, '%')
+         ORDER BY c.id
+         LIMIT 1`,
+      )
+      const contact = found[0]
+      expect(contact, 'a contact with a first and a last name in an active family').toBeDefined()
+      const id = Number(contact?.['id'])
+      const fullName = `${String(contact?.['fname'])} ${String(contact?.['lname'])}`
+
+      const contacts = (await get(`/api/v1/contacts?q=${encodeURIComponent(fullName)}&pageSize=100`)).json()
+      expect(contacts.items.some((item: { id: number }) => item.id === id), fullName).toBe(true)
+
+      const families = (await get(`/api/v1/families?q=${encodeURIComponent(fullName)}&pageSize=100`)).json()
+      expect(families.items.some((item: { id: number }) => item.id === Number(contact?.['familyId'])), fullName).toBe(true)
+
+      // Each word still has to be there: a first name with someone else's last name finds nobody.
+      const mixed = `${String(contact?.['fname'])} Nobody-has-this-last-name`
+      expect((await get(`/api/v1/contacts?q=${encodeURIComponent(mixed)}`)).json().total).toBe(0)
+      expect((await get(`/api/v1/families?q=${encodeURIComponent(mixed)}`)).json().total).toBe(0)
+    })
+
     it("lists each household's relationship, as the contact page does", async () => {
       const body = (await get('/api/v1/contacts?pageSize=20')).json()
       const withHouseholds = (body.items as { id: number; households: unknown[] }[]).filter(

@@ -171,6 +171,11 @@ function spawnMariaDb(command: string, args: string[], stdinPath?: string): Prom
       }
       const input = createReadStream(stdinPath)
       input.on('error', reject)
+      // When the client exits before it has read the whole dump (a wrong password, a missing database), the
+      // pipe breaks with EPIPE. That is not the failure to report: 'close' below has the exit code and what the
+      // client printed. Without a listener here, the EPIPE ended the script as an uncaught error first, and
+      // the client's message and the DB_ADMIN_PASSWORD hint were never shown.
+      stdin.on('error', () => input.destroy())
       input.pipe(stdin)
     }
     if (out === null || err === null) {

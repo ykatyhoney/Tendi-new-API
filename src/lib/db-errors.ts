@@ -9,6 +9,47 @@ interface DatabaseErrorLike {
   message?: unknown
 }
 
+/** What mysql2 and Node report when the server cannot be reached or drops the connection. */
+const CONNECTION_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'PROTOCOL_CONNECTION_LOST',
+  'PROTOCOL_SEQUENCE_TIMEOUT',
+  'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR',
+  'PROTOCOL_ENQUEUE_AFTER_QUIT',
+  'POOL_CLOSED',
+])
+
+/** 1040 too many connections, 1053 server shutdown in progress, 1927 connection was killed. */
+const UNAVAILABLE_ERRNOS = new Set([1040, 1053, 1927])
+
+/**
+ * The 503 body when the database could not be reached, or the connection was lost: MariaDB is down or
+ * restarting, the network dropped, or the server is out of connections. Null for every other error.
+ *
+ * The code is UNAVAILABLE, not RETRY. RETRY promises that nothing was saved (the transaction was rolled back),
+ * so a client may resend it by itself. A connection lost during COMMIT makes no such promise.
+ */
+export function databaseUnavailable(error: unknown): ApiErrorBody | null {
+  if (typeof error !== 'object' || error === null) {
+    return null
+  }
+  const { code, errno, fatal } = error as { code?: unknown; errno?: unknown; fatal?: unknown }
+  const known = typeof code === 'string' && CONNECTION_ERROR_CODES.has(code)
+  // mysql2 marks an error that ended the connection (a failed handshake, a protocol error) as fatal.
+  const lostConnection = fatal === true && (typeof code === 'string' || typeof errno === 'number')
+  if (!known && !lostConnection && !UNAVAILABLE_ERRNOS.has(Number(errno))) {
+    return null
+  }
+  return errorBody(503, 'UNAVAILABLE', 'The database is not available. Try again shortly.')
+}
+
 /** Maps a MariaDB failure to the API error body. Returns null when the error is not one of the known constraints. */
 export function mapDatabaseError(error: unknown): ApiErrorBody | null {
   if (!isDatabaseError(error)) {

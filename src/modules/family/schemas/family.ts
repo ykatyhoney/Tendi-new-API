@@ -5,6 +5,7 @@ import {
   emptyParentsBody,
   emptyParentsOption,
   newContact,
+  NOT_BLANK,
   notifyMethod,
   phone,
   recordStatus,
@@ -38,6 +39,10 @@ const searchChildDefinition = Type.Object(
     fname: Type.String(),
     lname: Type.String(),
     class: Type.Integer(),
+    status: Type.Union([Type.Literal('active'), Type.Literal('inactive'), Type.Literal('trash')], {
+      description:
+        "children.status. 'trash' appears only in a family's own children: a child trashed in the main admin stays linked (and mirrored) until it is unlinked, and the family cannot be archived before that. The family list leaves trashed children out.",
+    }),
   },
   { additionalProperties: false },
 )
@@ -154,7 +159,7 @@ export const familyWriteResult = model('FamilyWriteResult', familyWriteResultDef
 
 const createFamilyBodyDefinition = Type.Object(
   {
-    name: Type.String({ minLength: 1, maxLength: 100 }),
+    name: Type.String({ minLength: 1, maxLength: 100, pattern: NOT_BLANK }),
     householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
   },
   { additionalProperties: false },
@@ -163,7 +168,7 @@ export const createFamilyBody = model('CreateFamilyBody', createFamilyBodyDefini
 
 const patchFamilyBodyDefinition = Type.Object(
   {
-    name: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    name: Type.Optional(Type.String({ minLength: 1, maxLength: 100, pattern: NOT_BLANK })),
     householdPhone: Type.Optional(Type.String({ maxLength: OLD_COLUMN_LIMITS.phone })),
     status: Type.Optional(recordStatus),
   },

@@ -13,7 +13,7 @@ import {
   type EmailRow,
   type PhoneRow,
 } from '../repositories/contacts.js'
-import { listChildren, listRights, type RightsRow } from '../repositories/children.js'
+import { listChildren, listRights, type ChildRow, type RightsRow } from '../repositories/children.js'
 import type { Sql } from '../repositories/query.js'
 import type { FamilyDetail, FamilyPage, FamilySearchQuery } from '../schemas/family.js'
 import type { ParentSlot } from './mirror/types.js'
@@ -43,12 +43,7 @@ export async function searchFamilies(db: Sql, query: FamilySearchQuery): Promise
     items: page.families.map((family) => {
       const familyId = asNumber(family.id)
       const familyMembers = membersByFamily.get(familyId) ?? []
-      const familyChildren = (childrenByFamily.get(familyId) ?? []).map((child) => ({
-        id: asNumber(child.id),
-        fname: asString(child.fname),
-        lname: asString(child.lname),
-        class: asNumber(child.classId),
-      }))
+      const familyChildren = (childrenByFamily.get(familyId) ?? []).map(toChildSummary)
       const mainContactId = mainContacts.get(familyId)
       const slots = slotsOf(familyMembers)
       return {
@@ -70,6 +65,16 @@ export async function searchFamilies(db: Sql, query: FamilySearchQuery): Promise
     page: query.page,
     pageSize: query.pageSize,
     total: page.total,
+  }
+}
+
+function toChildSummary(child: ChildRow): FamilyDetail['children'][number] {
+  return {
+    id: asNumber(child.id),
+    fname: asString(child.fname),
+    lname: asString(child.lname),
+    class: asNumber(child.classId),
+    status: child.status === 'trash' || child.status === 'inactive' ? child.status : 'active',
   }
 }
 
@@ -112,7 +117,8 @@ export async function getFamily(db: Sql, id: number, includeTrash = false): Prom
     listPhones(db, contactIds),
     listEmails(db, contactIds),
     listAddresses(db, contactIds),
-    listChildren(db, [id]),
+    // Every linked child, a trashed one included (marked by its status), so the page can offer to unlink it.
+    listChildren(db, [id], { includeTrashed: true }),
     listRights(db, memberIds),
   ])
   const phonesByContact = groupBy(phones, (row) => asNumber(row.contactId))
@@ -128,12 +134,7 @@ export async function getFamily(db: Sql, id: number, includeTrash = false): Prom
     members: members.map((member) =>
       toMember(member, slots.get(asNumber(member.memberId)) ?? null, phonesByContact, emailsByContact, addressesByContact, rightsByMember),
     ),
-    children: children.map((child) => ({
-      id: asNumber(child.id),
-      fname: asString(child.fname),
-      lname: asString(child.lname),
-      class: asNumber(child.classId),
-    })),
+    children: children.map(toChildSummary),
   }
 }
 

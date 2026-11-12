@@ -81,12 +81,18 @@ const authPlugin: FastifyPluginAsync = async (app) => {
     // outage, where claim() says yes). The token lookup above is never cached: a revoked token or a
     // deactivated account is refused on its next request.
     if (await app.cache.claim(`last-seen:${row.tokenId}`, LAST_SEEN_INTERVAL_SECONDS)) {
-      await app.db.query<ResultSetHeader>(
-        `UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP()
-         WHERE id = :tokenId
-           AND (last_seen_at IS NULL OR last_seen_at < UTC_TIMESTAMP() - INTERVAL ${LAST_SEEN_INTERVAL_SECONDS} SECOND)`,
-        { tokenId: row.tokenId },
-      )
+      try {
+        await app.db.query<ResultSetHeader>(
+          `UPDATE admin_api_tokens SET last_seen_at = UTC_TIMESTAMP()
+           WHERE id = :tokenId
+             AND (last_seen_at IS NULL OR last_seen_at < UTC_TIMESTAMP() - INTERVAL ${LAST_SEEN_INTERVAL_SECONDS} SECOND)`,
+          { tokenId: row.tokenId },
+        )
+      } catch (error) {
+        // Bookkeeping only. The token and the account are already checked, so a write that fails here
+        // (a lock wait on the token row, a missing grant) must not turn a valid request into an error.
+        request.log.warn({ err: error }, 'last_seen_at could not be recorded for the staff token')
+      }
     }
   })
 

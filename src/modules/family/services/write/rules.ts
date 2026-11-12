@@ -1,11 +1,6 @@
 import { ApiError } from '../../../../lib/api-error.js'
 import { OLD_COLUMN_LIMITS } from '../../schemas/limits.js'
-import { joinAddress } from '../mirror/derive.js'
-
-/** Characters, as MariaDB counts them in a utf8mb4 column (not UTF-16 units). */
-function characterLength(value: string): number {
-  return Array.from(value).length
-}
+import { characterLength, joinAddress } from '../mirror/derive.js'
 
 /** "fname lname", without stray spaces. One of the two formats a stored legacy_full_name can be in. */
 export function legacyFullName(fname: string, lname: string): string {
@@ -57,7 +52,9 @@ export function typeLabelFor(type: string, label: string | null | undefined): st
     }
     return null
   }
-  if (trimmed.length < 1 || trimmed.length > 50) {
+  // Counted as the varchar(50) column and the request schema count them, so an astral character is one, not two.
+  const length = characterLength(trimmed)
+  if (length < 1 || length > 50) {
     throw new ApiError(400, 'TYPE_LABEL_NOT_ALLOWED', 'An other type needs a name of 1 to 50 characters.')
   }
   return trimmed

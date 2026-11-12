@@ -80,6 +80,12 @@ const MEMBER_SELECT = `SELECT m.family_id AS familyId, m.id, m.family_contact_id
   INNER JOIN family_contacts AS c ON c.id = m.family_contact_id AND c.status = 'active'
   INNER JOIN relationship_types AS rt ON rt.code = m.relationship`
 
+/** The rights columns the mirror reads. The caller adds the WHERE on child_id. */
+const RIGHTS_SELECT = `SELECT member_id AS memberId, child_id AS childId,
+         receives_notifications AS receivesNotifications, notify_method AS notifyMethod,
+         is_payment_responsible AS isPaymentResponsible
+  FROM family_member_children`
+
 export async function loadChildren(db: Sql, childIds: readonly number[] | 'linked'): Promise<LoadedChild[]> {
   const filter = childIds === 'linked' ? 'c.family_id IS NOT NULL' : `c.id IN (${placeholders(childIds.length)})`
   const params = childIds === 'linked' ? [] : childIds
@@ -108,41 +114,9 @@ export async function loadChildren(db: Sql, childIds: readonly number[] | 'linke
       `${MEMBER_SELECT} WHERE m.family_id IN (${placeholders(familyIds.length)})`,
       familyIds,
     ),
-    rows<RightsRow>(
-      db,
-      `SELECT member_id AS memberId, child_id AS childId,
-              receives_notifications AS receivesNotifications, notify_method AS notifyMethod,
-              is_payment_responsible AS isPaymentResponsible
-       FROM family_member_children
-       WHERE child_id IN (${placeholders(ids.length)})`,
-      ids,
-    ),
+    rows<RightsRow>(db, `${RIGHTS_SELECT} WHERE child_id IN (${placeholders(ids.length)})`, ids),
   ])
-  const contactIds = [...new Set(memberRows.map((row) => Number(row.contactId)))]
-  const [phoneRows, emailRows, addressRows] = await Promise.all([
-    listByContacts<PhoneRow>(
-      db,
-      contactIds,
-      `SELECT id, family_contact_id AS contactId, phone, type, type_label AS typeLabel,
-              is_primary AS isPrimary, sort_order AS sortOrder
-       FROM family_contact_phones`,
-    ),
-    listByContacts<EmailRow>(
-      db,
-      contactIds,
-      `SELECT id, family_contact_id AS contactId, email, is_primary AS isPrimary, sort_order AS sortOrder
-       FROM family_contact_emails`,
-    ),
-    listByContacts<AddressRow>(
-      db,
-      contactIds,
-      `SELECT id, family_contact_id AS contactId, type, line1, line2, city, state, zip, is_primary AS isPrimary
-       FROM family_contact_addresses`,
-    ),
-  ])
-  const phones = groupBy(phoneRows, (row) => Number(row.contactId))
-  const emails = groupBy(emailRows, (row) => Number(row.contactId))
-  const addresses = groupBy(addressRows, (row) => Number(row.contactId))
+  const lists = await loadContactLists(db, memberRows)
   const membersByFamily = groupBy(memberRows, (row) => Number(row.familyId))
   const rightsByChild = groupBy(rightsRows, (row) => Number(row.childId))
 
@@ -150,7 +124,7 @@ export async function loadChildren(db: Sql, childIds: readonly number[] | 'linke
     const childId = Number(row.id)
     const rights = new Map((rightsByChild.get(childId) ?? []).map((rightsRow) => [Number(rightsRow.memberId), rightsRow]))
     const members = (membersByFamily.get(Number(row.familyId)) ?? []).map((member) =>
-      toMember(member, phones, emails, addresses, rights.get(Number(member.id)) ?? null),
+      toMember(member, lists, rights.get(Number(member.id)) ?? null),
     )
     return {
       child: { id: childId },
@@ -220,8 +194,28 @@ async function assembleFamily(
   childId: number,
   memberRows: MemberRow[],
 ): Promise<MirrorFamily> {
+  const [lists, rightsRows] = await Promise.all([
+    loadContactLists(db, memberRows),
+    rows<RightsRow>(db, `${RIGHTS_SELECT} WHERE child_id = ?`, [childId]),
+  ])
+  const rights = new Map(rightsRows.map((rightsRow) => [Number(rightsRow.memberId), rightsRow]))
+  return {
+    id: familyId,
+    householdPhone,
+    members: memberRows.map((member) => toMember(member, lists, rights.get(Number(member.id)) ?? null)),
+  }
+}
+
+/** The phones, emails and addresses of these members' contacts, each grouped by contact id. */
+interface ContactLists {
+  phones: Map<number, PhoneRow[]>
+  emails: Map<number, EmailRow[]>
+  addresses: Map<number, AddressRow[]>
+}
+
+async function loadContactLists(db: Sql, memberRows: readonly MemberRow[]): Promise<ContactLists> {
   const contactIds = [...new Set(memberRows.map((row) => Number(row.contactId)))]
-  const [phoneRows, emailRows, addressRows, rightsRows] = await Promise.all([
+  const [phoneRows, emailRows, addressRows] = await Promise.all([
     listByContacts<PhoneRow>(
       db,
       contactIds,
@@ -241,26 +235,11 @@ async function assembleFamily(
       `SELECT id, family_contact_id AS contactId, type, line1, line2, city, state, zip, is_primary AS isPrimary
        FROM family_contact_addresses`,
     ),
-    rows<RightsRow>(
-      db,
-      `SELECT member_id AS memberId, child_id AS childId,
-              receives_notifications AS receivesNotifications, notify_method AS notifyMethod,
-              is_payment_responsible AS isPaymentResponsible
-       FROM family_member_children
-       WHERE child_id = ?`,
-      [childId],
-    ),
   ])
-  const phones = groupBy(phoneRows, (row) => Number(row.contactId))
-  const emails = groupBy(emailRows, (row) => Number(row.contactId))
-  const addresses = groupBy(addressRows, (row) => Number(row.contactId))
-  const rights = new Map(rightsRows.map((rightsRow) => [Number(rightsRow.memberId), rightsRow]))
   return {
-    id: familyId,
-    householdPhone,
-    members: memberRows.map((member) =>
-      toMember(member, phones, emails, addresses, rights.get(Number(member.id)) ?? null),
-    ),
+    phones: groupBy(phoneRows, (row) => Number(row.contactId)),
+    emails: groupBy(emailRows, (row) => Number(row.contactId)),
+    addresses: groupBy(addressRows, (row) => Number(row.contactId)),
   }
 }
 
@@ -278,13 +257,7 @@ async function listByContacts<T extends RowDataPacket>(db: Sql, contactIds: read
   return rows<T>(db, `${sql} WHERE family_contact_id IN (${placeholders(contactIds.length)})`, contactIds)
 }
 
-function toMember(
-  row: MemberRow,
-  phones: Map<number, PhoneRow[]>,
-  emails: Map<number, EmailRow[]>,
-  addresses: Map<number, AddressRow[]>,
-  rights: RightsRow | null,
-): MirrorMember {
+function toMember(row: MemberRow, { phones, emails, addresses }: ContactLists, rights: RightsRow | null): MirrorMember {
   const contactId = Number(row.contactId)
   return {
     id: Number(row.id),
