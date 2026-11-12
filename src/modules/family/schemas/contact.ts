@@ -48,7 +48,12 @@ const contactSummaryDefinition = Type.Object(
     phones: Type.Array(contactPhone),
     households: Type.Array(
       Type.Object(
-        { familyId: Type.Integer(), familyName: Type.String() },
+        {
+          familyId: Type.Integer(),
+          familyName: Type.String(),
+          relationship: Type.String(),
+          relationshipLabel: Type.String(),
+        },
         { additionalProperties: false },
       ),
     ),
@@ -57,7 +62,19 @@ const contactSummaryDefinition = Type.Object(
 )
 const contactSummary = model('ContactSummary', contactSummaryDefinition)
 
-export const contactSearchQuery = searchQuery
+export const contactSearchQuery = Type.Object({
+  ...searchQuery.properties,
+  relationship: Type.Optional(
+    Type.String({
+      maxLength: 1000,
+      pattern: '^[a-z][a-z_]*(,[a-z][a-z_]*)*$',
+      description:
+        'Comma-separated relationship codes. Only contacts who hold one of them in an active household are listed.',
+    }),
+  ),
+})
+
+export type ContactSearchQuery = Type.Static<typeof contactSearchQuery>
 
 const contactPageDefinition = Type.Object(
   {

@@ -128,7 +128,22 @@ A full review found these and fixed them on `family/b12-review-fixes`:
 
 Write SQL still lives in `services/write/*`, `links.ts`, and `relationship-types.ts`, next to the locks and audit rows that must surround it. `repositories/` holds the reads that several services share. Moving the write SQL into repositories is worth doing only alongside a full `npm test` run on MariaDB.
 
+## Reads for the Tendi-new screens (12 November 2026)
+
+Read-only, within the existing grants, no schema change. Tests: `test/api/screen-reads.test.ts`, `test/unit/mirror-slots.test.ts`.
+
+- `GET /api/v1/staff/me`: the token's `adminId`, `name`, `type`, and `relationshipAdmin` (the type is in `RELATIONSHIP_ADMIN_TYPES`). Staff auth answers 401 and 403 before it, so the screens use it to check a token.
+- `GET /api/v1/children?q=&status=&linked=&page=&pageSize=`: the legacy `children` table, read only. `status` is `active` (default), `inactive`, or `all` (both); trashed children are never listed. `linked` is `all` (default), `yes`, or `no` on `children.family_id`. `q` matches first name, last name, "first last", or the exact id. Each item: `id`, `fname`, `lname`, `className` (the class's friendly name, else its name, `''` when the class row is missing, as for 605 dev children), `status`, `enrollmentStatus` (`enrolled`, `waitlist`), `dob` (null for a zero date), `familyId`, `familyName`. The default matters: 488 of the 624 linked children are inactive. `GET /api/v1/children/:childId` returns one item, 404 for an unknown or trashed child. The API still never creates a child.
+- `GET /families`: each item has `address`, the main contact's home address (primary first, then lowest id) joined as the mirror joins `*_address`; `''` when there is no main contact or no home address.
+- `GET /contacts`: each household has `relationship` and `relationshipLabel`. `relationship=code,code` lists only contacts who hold one of those codes in an active household (the Contacts view's Parents / Family / Professionals / Others filter, applied in SQL so paging and the total stay right).
+- `GET /families`: each summary member has `mirrorSlot` too, so the list's Parents column shows the same two people as the family page.
+- `GET /families/:id` (and every response that embeds a Family): each member has `mirrorSlot` (`father`, `mother`, or null), from `mirrorSlots()` in `services/mirror/derive.ts`, the same `pickParent()` that `deriveLegacyValues` uses. The screens show these as the parents instead of picking them. The test checks, for every active family with linked children, that the slotted members' names equal the stored `father_name`, `mother_name`, `father_fname`, and `mother_fname`.
+
 ## Open items
+
+- **Overwritten edits (before go-live).** The phone, email, and address saves replace the whole list, so a second staff member's save silently drops the first one's changes. Planned: every PATCH and list PUT (phones, emails, addresses, rights) takes the `updatedAt` the screen last read and returns 409 `STALE`, writing nothing, when the record changed since. Tendi-new already has a message for `STALE`.
+- **Branch access.** `admin.required_branches` limits some staff to certain branches in the old system; the family routes ignore it. Decide before real sign-in.
+- **Billing storage.** The screens hide payment method and billing address because there is nowhere to store them. "Who pays" comes from `is_payment_responsible` per child. Columns for method and billing address go to the schema owner (Mr. Khan).
 
 - Set `REDIS_URL` wherever more than one API instance runs, so they share one rate-limit count, one `last_seen_at` throttle, and one dropdown cache. It is tested here against Redis 7.0 and in CI against Ubuntu's Redis. Check it once against the production Redis.
 

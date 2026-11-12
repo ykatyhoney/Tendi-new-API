@@ -129,12 +129,41 @@ export function assertLegacyLengths(values: LegacyValues, lengths: ReadonlyMap<s
   )
 }
 
-function parent(family: MirrorFamily, slot: ParentSlot): MirrorMember | null {
-  const candidates = family.members.filter((member) => member.status === 'active' && member.slot === slot)
+/** What the father and mother pick reads from a member. */
+export interface SlotCandidate {
+  id: number
+  status: 'active' | 'trash'
+  slot: ParentSlot | null
+  slotRank: number | null
+  sortOrder: number
+}
+
+/**
+ * The member the mirror writes as father or mother: the active member in that slot with the lowest slot_rank
+ * (father before step_father), then the lowest sort_order, then the lowest member id.
+ */
+export function pickParent<T extends SlotCandidate>(members: readonly T[], slot: ParentSlot): T | null {
+  const candidates = members.filter((member) => member.status === 'active' && member.slot === slot)
   candidates.sort(
     (a, b) => (a.slotRank ?? 99) - (b.slotRank ?? 99) || a.sortOrder - b.sortOrder || a.id - b.id,
   )
   return candidates[0] ?? null
+}
+
+/** Member id -> the slot the mirror fills from that member. Members it does not use are left out. */
+export function mirrorSlots(members: readonly SlotCandidate[]): Map<number, ParentSlot> {
+  const slots = new Map<number, ParentSlot>()
+  for (const slot of ['father', 'mother'] as const) {
+    const picked = pickParent(members, slot)
+    if (picked !== null) {
+      slots.set(picked.id, slot)
+    }
+  }
+  return slots
+}
+
+function parent(family: MirrorFamily, slot: ParentSlot): MirrorMember | null {
+  return pickParent(family.members, slot)
 }
 
 function flag(member: MirrorMember | null): 0 | 1 {

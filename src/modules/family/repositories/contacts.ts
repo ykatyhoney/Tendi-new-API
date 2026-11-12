@@ -88,13 +88,24 @@ export async function pageContacts(
   query: string,
   page: number,
   pageSize: number,
+  relationships: readonly string[] = [],
 ): Promise<{ total: number; contacts: ContactRow[] }> {
   const match = contactMatch(query)
-  const from =
+  const base =
     match === null
       ? `FROM family_contacts AS c WHERE c.status = 'active'`
       : `FROM family_contacts AS c INNER JOIN (${match.sql}) AS hit ON hit.id = c.id WHERE c.status = 'active'`
-  const params = match?.params ?? []
+  const params = [...(match?.params ?? [])]
+  // Only contacts who hold one of these relationships in an active household.
+  const from =
+    relationships.length === 0
+      ? base
+      : `${base} AND c.id IN (
+           SELECT m.family_contact_id
+           FROM family_members AS m
+           INNER JOIN families AS f ON f.id = m.family_id AND f.status = 'active'
+           WHERE m.status = 'active' AND m.relationship IN (${placeholders(relationships.length)}))`
+  params.push(...relationships)
   const [totals, contacts] = await Promise.all([
     rows<RowDataPacket>(db, `SELECT COUNT(*) AS total ${from}`, params),
     rows<ContactRow>(

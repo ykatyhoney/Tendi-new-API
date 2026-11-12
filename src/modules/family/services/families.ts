@@ -16,6 +16,8 @@ import {
 import { listChildren, listRights, type RightsRow } from '../repositories/children.js'
 import type { Sql } from '../repositories/query.js'
 import type { FamilyDetail, FamilyPage, FamilySearchQuery } from '../schemas/family.js'
+import type { ParentSlot } from './mirror/types.js'
+import { joinAddress, mirrorSlots } from './mirror/derive.js'
 import { toAddress, toEmail, toPhone, toRights } from './mappers.js'
 import { asBoolean, asNumber, asNullableString, asString, contactName, groupBy } from './values.js'
 
@@ -28,23 +30,37 @@ export async function searchFamilies(db: Sql, query: FamilySearchQuery): Promise
   ])
   const membersByFamily = groupBy(members, (member) => asNumber(member.familyId))
   const childrenByFamily = groupBy(children, (child) => asNumber(child.familyId))
+  const mainContacts = new Map<number, number>()
+  for (const [familyId, familyMembers] of membersByFamily) {
+    const main = familyMembers.find((member) => asBoolean(member.isPrimary))
+    if (main !== undefined) {
+      mainContacts.set(familyId, asNumber(main.contactId))
+    }
+  }
+  const addresses = await listAddresses(db, [...new Set(mainContacts.values())])
+  const addressesByContact = groupBy(addresses, (row) => asNumber(row.contactId))
   return {
     items: page.families.map((family) => {
-      const familyMembers = membersByFamily.get(asNumber(family.id)) ?? []
-      const familyChildren = (childrenByFamily.get(asNumber(family.id)) ?? []).map((child) => ({
+      const familyId = asNumber(family.id)
+      const familyMembers = membersByFamily.get(familyId) ?? []
+      const familyChildren = (childrenByFamily.get(familyId) ?? []).map((child) => ({
         id: asNumber(child.id),
         fname: asString(child.fname),
         lname: asString(child.lname),
         class: asNumber(child.classId),
       }))
+      const mainContactId = mainContacts.get(familyId)
+      const slots = slotsOf(familyMembers)
       return {
-        id: asNumber(family.id),
+        id: familyId,
         name: asString(family.name),
         householdPhone: asString(family.householdPhone),
+        address: mainContactId === undefined ? '' : homeAddress(addressesByContact.get(mainContactId) ?? []),
         members: familyMembers.map((member) => ({
           name: contactName(asString(member.fname), asString(member.lname), asString(member.legacyFullName)),
           relationship: asString(member.relationship),
           relationshipLabel: asString(member.relationshipLabel),
+          mirrorSlot: slots.get(asNumber(member.memberId)) ?? null,
         })),
         children: familyChildren,
         memberCount: familyMembers.length,
@@ -55,6 +71,33 @@ export async function searchFamilies(db: Sql, query: FamilySearchQuery): Promise
     pageSize: query.pageSize,
     total: page.total,
   }
+}
+
+/** Member id -> father or mother, by the mirror's rule. listMembers returns active members only, which is what the mirror picks from. */
+function slotsOf(members: readonly MemberRow[]): Map<number, ParentSlot> {
+  return mirrorSlots(
+    members.map((member) => ({
+      id: asNumber(member.memberId),
+      status: 'active' as const,
+      slot: member.parentSlot,
+      slotRank: member.slotRank === null ? null : asNumber(member.slotRank),
+      sortOrder: asNumber(member.sortOrder),
+    })),
+  )
+}
+
+/** A contact's home address, primary first (listAddresses orders by is_primary DESC, id), as the mirror joins it. */
+function homeAddress(rows: readonly AddressRow[]): string {
+  const home = rows.find((row) => row.type === 'home')
+  return home === undefined
+    ? ''
+    : joinAddress({
+        line1: asString(home.line1),
+        line2: asString(home.line2),
+        city: asString(home.city),
+        state: asString(home.state),
+        zip: asString(home.zip),
+      })
 }
 
 export async function getFamily(db: Sql, id: number, includeTrash = false): Promise<FamilyDetail | null> {
@@ -76,12 +119,15 @@ export async function getFamily(db: Sql, id: number, includeTrash = false): Prom
   const emailsByContact = groupBy(emails, (row) => asNumber(row.contactId))
   const addressesByContact = groupBy(addresses, (row) => asNumber(row.contactId))
   const rightsByMember = groupBy(rights, (row) => asNumber(row.memberId))
+  const slots = slotsOf(members)
   return {
     id: asNumber(family.id),
     name: asString(family.name),
     householdPhone: asString(family.householdPhone),
     status: family.status,
-    members: members.map((member) => toMember(member, phonesByContact, emailsByContact, addressesByContact, rightsByMember)),
+    members: members.map((member) =>
+      toMember(member, slots.get(asNumber(member.memberId)) ?? null, phonesByContact, emailsByContact, addressesByContact, rightsByMember),
+    ),
     children: children.map((child) => ({
       id: asNumber(child.id),
       fname: asString(child.fname),
@@ -93,6 +139,7 @@ export async function getFamily(db: Sql, id: number, includeTrash = false): Prom
 
 function toMember(
   member: MemberRow,
+  mirrorSlot: ParentSlot | null,
   phonesByContact: Map<number, PhoneRow[]>,
   emailsByContact: Map<number, EmailRow[]>,
   addressesByContact: Map<number, AddressRow[]>,
@@ -103,6 +150,7 @@ function toMember(
     id: asNumber(member.memberId),
     relationship: asString(member.relationship),
     relationshipLabel: asString(member.relationshipLabel),
+    mirrorSlot,
     isPrimary: asBoolean(member.isPrimary),
     sortOrder: asNumber(member.sortOrder),
     contact: {

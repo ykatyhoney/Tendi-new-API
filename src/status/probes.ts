@@ -116,6 +116,12 @@ export const PROBES: readonly Probe[] = [
     note: 'The public URL answers through Cloudflare, TLS and nginx, and asks for the password.',
     path: () => '/api/v1/health/live', expectStatus: 401,
   },
+  {
+    id: 'staff-me', group: 'Access', name: 'Who is signed in', method: 'GET', route: '/api/v1/staff/me',
+    kind: 'read', note: "The token's staff member, for the screens.", path: () => '/api/v1/staff/me',
+    expectStatus: 200,
+    check: (body) => (typeof field(body, 'adminId') === 'number' ? null : 'adminId is missing'),
+  },
   // Families
   {
     id: 'families-search', group: 'Families', name: 'Search families', method: 'GET', route: '/api/v1/families',
@@ -200,6 +206,19 @@ export const PROBES: readonly Probe[] = [
     body: (context) => ({ addresses: context.addresses }), expectStatus: 200, check: nothingWritten,
   },
   // Children and links
+  {
+    id: 'children-list', group: 'Children and links', name: 'List children', method: 'GET',
+    route: '/api/v1/children', kind: 'read', note: 'Linked active children, paged. Finds the linked child by id.',
+    path: (context) => `/api/v1/children?q=${context.linkedChildId}&status=all&linked=yes&pageSize=10`,
+    expectStatus: 200,
+    check: (body, context) => hasItem((item) => item['id'] === context.linkedChildId, 'the linked child')(body),
+  },
+  {
+    id: 'children-get', group: 'Children and links', name: 'Get a child', method: 'GET',
+    route: '/api/v1/children/{childId}', kind: 'read', note: 'One child, with its class and family.',
+    path: (context) => `/api/v1/children/${context.linkedChildId}`, expectStatus: 200,
+    check: (body) => (typeof field(body, 'familyId') === 'number' ? null : 'the child is not linked'),
+  },
   {
     id: 'children-family', group: 'Children and links', name: "A child's family", method: 'GET',
     route: '/api/v1/children/{childId}/family', kind: 'read', note: 'A linked child reads as linked, with its family.',
