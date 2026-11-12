@@ -625,7 +625,9 @@ describe('logic fixes against MariaDB', () => {
     const search = await app.inject({ method: 'GET', url: '/api/v1/contacts?q=Zzyzxten', headers: auth })
     expect(search.statusCode).toBe(200)
     const item = search.json().items.find((row: { id: number }) => row.id === member.contactId)
-    expect(item.households).toEqual([{ familyId: live, familyName: 'LF F10 live' }])
+    expect(item.households).toEqual([
+      { familyId: live, familyName: 'LF F10 live', relationship: TYPES.uncle, relationshipLabel: expect.any(String) },
+    ])
   })
 
   it('F11 compares staff types without case: an "Admin" list lets type admin in', async () => {

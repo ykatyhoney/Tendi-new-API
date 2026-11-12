@@ -5,6 +5,7 @@ import familyRoutes from './routes/families.js'
 import healthRoutes from './routes/health.js'
 import linkRoutes from './routes/links.js'
 import relationshipTypeRoutes from './routes/relationship-types.js'
+import staffRoutes from './routes/staff.js'
 
 export interface FamilyModuleOptions {
   /** Registered inside the staff-auth boundary. Tests use this for guarded routes. */
@@ -24,6 +25,7 @@ const familyModule: FastifyPluginAsync<FamilyModuleOptions> = async (app, option
       await staffScope.authenticate(request, reply)
     })
 
+    await staffScope.register(staffRoutes)
     await staffScope.register(familyRoutes)
     await staffScope.register(contactRoutes)
     await staffScope.register(childRoutes)

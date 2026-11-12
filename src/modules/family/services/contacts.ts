@@ -7,13 +7,13 @@ import {
   pageContacts,
 } from '../repositories/contacts.js'
 import type { Sql } from '../repositories/query.js'
-import type { ContactDetail, ContactPage } from '../schemas/contact.js'
-import type { FamilySearchQuery } from '../schemas/family.js'
+import type { ContactDetail, ContactPage, ContactSearchQuery } from '../schemas/contact.js'
 import { toAddress, toEmail, toPhone } from './mappers.js'
 import { asBoolean, asNumber, asNullableString, asString, groupBy } from './values.js'
 
-export async function searchContacts(db: Sql, query: FamilySearchQuery): Promise<ContactPage> {
-  const page = await pageContacts(db, query.q ?? '', query.page, query.pageSize)
+export async function searchContacts(db: Sql, query: ContactSearchQuery): Promise<ContactPage> {
+  const relationships = [...new Set((query.relationship ?? '').split(',').filter((code) => code.length > 0))]
+  const page = await pageContacts(db, query.q ?? '', query.page, query.pageSize, relationships)
   const contactIds = page.contacts.map((contact) => asNumber(contact.id))
   const [phones, households] = await Promise.all([
     listPhones(db, contactIds),
@@ -37,6 +37,8 @@ export async function searchContacts(db: Sql, query: FamilySearchQuery): Promise
         households: (householdsByContact.get(id) ?? []).map((row) => ({
           familyId: asNumber(row.familyId),
           familyName: asString(row.familyName),
+          relationship: asString(row.relationship),
+          relationshipLabel: asString(row.relationshipLabel),
         })),
       }
     }),

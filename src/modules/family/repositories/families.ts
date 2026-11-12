@@ -17,6 +17,8 @@ export interface MemberRow extends RowDataPacket {
   memberId: number
   relationship: string
   relationshipLabel: string
+  parentSlot: 'father' | 'mother' | null
+  slotRank: number | null
   isPrimary: number
   sortOrder: number
   contactId: number
@@ -121,6 +123,7 @@ export async function listMembers(db: Sql, familyIds: readonly number[]): Promis
   return rows<MemberRow>(
     db,
     `SELECT m.family_id AS familyId, m.id AS memberId, m.relationship, rt.label AS relationshipLabel,
+            rt.parent_slot AS parentSlot, rt.slot_rank AS slotRank,
             m.is_primary AS isPrimary, m.sort_order AS sortOrder,
             c.id AS contactId, c.fname, c.lname, c.legacy_full_name AS legacyFullName,
             c.hebrew_name AS hebrewName, c.occupation, c.employer, c.note

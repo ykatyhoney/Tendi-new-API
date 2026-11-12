@@ -16,11 +16,17 @@ import { model } from './models.js'
 
 export const familySearchQuery = searchQuery
 
+const mirrorSlot = Type.Union([Type.Literal('father'), Type.Literal('mother'), Type.Null()], {
+  description:
+    "The old parent columns this member fills on the family's linked children, picked by the mirror's own rule. Null for every other member.",
+})
+
 const searchMemberDefinition = Type.Object(
   {
     name: Type.String(),
     relationship: Type.String(),
     relationshipLabel: Type.String(),
+    mirrorSlot,
   },
   { additionalProperties: false },
 )
@@ -42,6 +48,10 @@ const familySummaryDefinition = Type.Object(
     id: Type.Integer(),
     name: Type.String(),
     householdPhone: Type.String(),
+    address: Type.String({
+      description:
+        "The main contact's home address (primary first), joined as the mirror joins it; '' when there is none.",
+    }),
     members: Type.Array(searchMember),
     children: Type.Array(searchChild),
     memberCount: Type.Integer(),
@@ -101,6 +111,7 @@ const memberDefinition = Type.Object(
     id: Type.Integer(),
     relationship: Type.String(),
     relationshipLabel: Type.String(),
+    mirrorSlot,
     isPrimary: Type.Boolean(),
     sortOrder: Type.Integer(),
     contact: contactCard,

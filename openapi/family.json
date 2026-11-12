@@ -40,6 +40,96 @@
         },
         "additionalProperties": false
       },
+      "ChildListItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "fname",
+          "lname",
+          "className",
+          "status",
+          "enrollmentStatus",
+          "dob",
+          "familyId",
+          "familyName"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "fname": {
+            "type": "string"
+          },
+          "lname": {
+            "type": "string"
+          },
+          "className": {
+            "type": "string",
+            "description": "The class's friendly name, else its name; '' when the class is not on file."
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "inactive"
+                ]
+              }
+            ]
+          },
+          "enrollmentStatus": {
+            "type": "string",
+            "description": "children.enrollment_status, for example enrolled or waitlist."
+          },
+          "dob": {
+            "description": "YYYY-MM-DD; null for an empty or zero date.",
+            "type": "string",
+            "nullable": true
+          },
+          "familyId": {
+            "type": "integer",
+            "nullable": true
+          },
+          "familyName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChildPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChildListItem"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      },
       "PhoneType": {
         "anyOf": [
           {
@@ -339,7 +429,8 @@
         "required": [
           "name",
           "relationship",
-          "relationshipLabel"
+          "relationshipLabel",
+          "mirrorSlot"
         ],
         "properties": {
           "name": {
@@ -350,6 +441,30 @@
           },
           "relationshipLabel": {
             "type": "string"
+          },
+          "mirrorSlot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "father"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "mother"
+                ]
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ],
+            "description": "The old parent columns this member fills on the family's linked children, picked by the mirror's own rule. Null for every other member."
           }
         },
         "additionalProperties": false
@@ -384,6 +499,7 @@
           "id",
           "name",
           "householdPhone",
+          "address",
           "members",
           "children",
           "memberCount",
@@ -398,6 +514,10 @@
           },
           "householdPhone": {
             "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "description": "The main contact's home address (primary first), joined as the mirror joins it; '' when there is none."
           },
           "members": {
             "type": "array",
@@ -561,6 +681,7 @@
           "id",
           "relationship",
           "relationshipLabel",
+          "mirrorSlot",
           "isPrimary",
           "sortOrder",
           "contact",
@@ -575,6 +696,30 @@
           },
           "relationshipLabel": {
             "type": "string"
+          },
+          "mirrorSlot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "father"
+                ]
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "mother"
+                ]
+              },
+              {
+                "type": "object",
+                "nullable": true,
+                "enum": [
+                  null
+                ]
+              }
+            ],
+            "description": "The old parent columns this member fills on the family's linked children, picked by the mirror's own rule. Null for every other member."
           },
           "isPrimary": {
             "type": "boolean"
@@ -891,13 +1036,21 @@
               "type": "object",
               "required": [
                 "familyId",
-                "familyName"
+                "familyName",
+                "relationship",
+                "relationshipLabel"
               ],
               "properties": {
                 "familyId": {
                   "type": "integer"
                 },
                 "familyName": {
+                  "type": "string"
+                },
+                "relationship": {
+                  "type": "string"
+                },
+                "relationshipLabel": {
                   "type": "string"
                 }
               },
@@ -1206,6 +1359,32 @@
             "items": {
               "type": "integer"
             }
+          }
+        },
+        "additionalProperties": false
+      },
+      "StaffMe": {
+        "type": "object",
+        "required": [
+          "adminId",
+          "name",
+          "type",
+          "relationshipAdmin"
+        ],
+        "properties": {
+          "adminId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "admin.type, lowercased and trimmed."
+          },
+          "relationshipAdmin": {
+            "type": "boolean",
+            "description": "May add and change relationship types."
           }
         },
         "additionalProperties": false
@@ -1838,6 +2017,51 @@
         }
       }
     },
+    "/api/v1/staff/me": {
+      "get": {
+        "operationId": "getCurrentStaff",
+        "tags": [
+          "family"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffMe"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/families": {
       "get": {
         "operationId": "listFamilies",
@@ -2346,6 +2570,17 @@
             "in": "query",
             "name": "pageSize",
             "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 1000,
+              "pattern": "^[a-z][a-z_]*(,[a-z][a-z_]*)*$"
+            },
+            "in": "query",
+            "name": "relationship",
+            "required": false,
+            "description": "Comma-separated relationship codes. Only contacts who hold one of them in an active household are listed."
           }
         ],
         "security": [
@@ -2678,6 +2913,198 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ContactWriteResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/children": {
+      "get": {
+        "operationId": "listChildren",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "description": "First name, last name, \"first last\", or the exact child id."
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "active"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "inactive"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "all"
+                  ]
+                }
+              ],
+              "default": "active"
+            },
+            "in": "query",
+            "name": "status",
+            "required": true,
+            "description": "children.status. 'all' is active and inactive; trashed children are never listed."
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "all"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "yes"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "no"
+                  ]
+                }
+              ],
+              "default": "all"
+            },
+            "in": "query",
+            "name": "linked",
+            "required": true,
+            "description": "'yes': children.family_id is set. 'no': it is NULL."
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "in": "query",
+            "name": "page",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "in": "query",
+            "name": "pageSize",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChildPage"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/children/{childId}": {
+      "get": {
+        "operationId": "getChild",
+        "tags": [
+          "family"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "in": "path",
+            "name": "childId",
+            "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChildListItem"
                 }
               }
             }
